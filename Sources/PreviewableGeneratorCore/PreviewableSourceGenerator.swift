@@ -15,7 +15,7 @@ public enum PreviewableSourceGenerator {
     var fakes: [String] = []
     var unavailableFakes: [String] = []
     var previewConfigurations: [String] = []
-    var usedLoremWords: Set<String> = []
+    var fakeDefaultValues = FakeDefaultValues()
     let files = sources.map { Parser.parse(source: $0) }
     let enumDefaults = enumDefaults(in: files)
 
@@ -31,7 +31,7 @@ public enum PreviewableSourceGenerator {
           let generated = try generateDouble(
             from: declaration,
             enumDefaults: enumDefaults,
-            usedLoremWords: &usedLoremWords
+            fakeDefaultValues: &fakeDefaultValues
           )
           doubles.append(generated.declaration)
           previewConfigurations.append(generated.previewConfiguration)
@@ -45,7 +45,7 @@ public enum PreviewableSourceGenerator {
             try generateFake(
               from: declaration,
               enumDefaults: enumDefaults,
-              usedLoremWords: &usedLoremWords
+              fakeDefaultValues: &fakeDefaultValues
             )
           )
           unavailableFakes.append(try generateUnavailableFake(from: declaration))
@@ -59,7 +59,7 @@ public enum PreviewableSourceGenerator {
             try generateFake(
               from: declaration,
               enumDefaults: enumDefaults,
-              usedLoremWords: &usedLoremWords
+              fakeDefaultValues: &fakeDefaultValues
             )
           )
           unavailableFakes.append(try generateUnavailableFake(from: declaration))
@@ -111,6 +111,13 @@ private extension PreviewableSourceGenerator {
     let requirement: String
   }
 
+  struct FakeDefaultValues {
+    var strings: Set<String> = []
+    var numbers: Set<Int> = []
+    var urls: Set<Int> = []
+    var uuids: Set<Int> = []
+  }
+
   struct StoredProperty {
     let name: String
     let type: String
@@ -160,7 +167,7 @@ private extension PreviewableSourceGenerator {
   static func generateDouble(
     from declaration: ProtocolDeclSyntax,
     enumDefaults: [String: String],
-    usedLoremWords: inout Set<String>
+    fakeDefaultValues: inout FakeDefaultValues
   ) throws -> GeneratedDouble {
     guard declaration.primaryAssociatedTypeClause == nil,
           declaration.genericWhereClause == nil
@@ -186,7 +193,7 @@ private extension PreviewableSourceGenerator {
             from: variable,
             access: access,
             enumDefaults: enumDefaults,
-            usedLoremWords: &usedLoremWords
+            fakeDefaultValues: &fakeDefaultValues
         ) {
           stubDeclarations.append(property.stub)
           requirementDeclarations.append(property.requirement)
@@ -203,7 +210,7 @@ private extension PreviewableSourceGenerator {
             from: function,
             access: access,
             enumDefaults: enumDefaults,
-            usedLoremWords: &usedLoremWords
+            fakeDefaultValues: &fakeDefaultValues
           )
         stubDeclarations.append(contentsOf: method.stubs)
         requirementDeclarations.append(method.requirement)
@@ -285,7 +292,7 @@ private extension PreviewableSourceGenerator {
     from declaration: VariableDeclSyntax,
     access: String,
     enumDefaults: [String: String],
-    usedLoremWords: inout Set<String>
+    fakeDefaultValues: inout FakeDefaultValues
   ) throws -> [GeneratedProperty] {
     guard !isStatic(declaration.modifiers) else {
       throw GenerationError.message(
@@ -309,7 +316,7 @@ private extension PreviewableSourceGenerator {
         for: type,
         context: .double,
         enumDefaults: enumDefaults,
-        usedLoremWords: &usedLoremWords
+        fakeDefaultValues: &fakeDefaultValues
       )
       let stub = "\(access)var \(name)Stub: \(type) = \(defaultValue)"
       if isSettable {
@@ -334,7 +341,7 @@ private extension PreviewableSourceGenerator {
     from function: FunctionDeclSyntax,
     access: String,
     enumDefaults: [String: String],
-    usedLoremWords: inout Set<String>
+    fakeDefaultValues: inout FakeDefaultValues
   ) throws -> GeneratedMethod {
     guard !isStatic(function.modifiers),
           function.genericParameterClause == nil,
@@ -376,7 +383,7 @@ private extension PreviewableSourceGenerator {
         for: returnType,
         context: .double,
         enumDefaults: enumDefaults,
-        usedLoremWords: &usedLoremWords
+        fakeDefaultValues: &fakeDefaultValues
       )
       declarations.append("\(access)var \(methodName)Stub: \(returnType) = \(defaultValue)")
     }
@@ -404,7 +411,7 @@ private extension PreviewableSourceGenerator {
   static func generateFake(
     from declaration: some DeclGroupSyntax,
     enumDefaults: [String: String],
-    usedLoremWords: inout Set<String>
+    fakeDefaultValues: inout FakeDefaultValues
   ) throws -> String {
     let typeName: String
     let members: MemberBlockItemListSyntax
@@ -440,7 +447,7 @@ private extension PreviewableSourceGenerator {
         for: property.type,
         context: .fake,
         enumDefaults: enumDefaults,
-        usedLoremWords: &usedLoremWords
+        fakeDefaultValues: &fakeDefaultValues
       )
       parameterDeclarations.append(
         "\(property.name): \(property.type) = \(defaultValue)"
@@ -523,6 +530,7 @@ private extension PreviewableSourceGenerator {
     return """
       /// Preserves the `fake(...)` signature outside Debug builds.
       extension \(typeName) {
+        /// Prevents fake construction outside Debug builds.
         /// - Warning: Available only in Debug builds.
         @inline(__always)
         \(access)static func fake(
@@ -603,18 +611,18 @@ private extension PreviewableSourceGenerator {
     for type: String,
     context: DefaultContext,
     enumDefaults: [String: String],
-    usedLoremWords: inout Set<String>
+    fakeDefaultValues: inout FakeDefaultValues
   ) -> String {
     let compactType = type.filter { !$0.isWhitespace }
     if compactType.hasSuffix("?") { return ".none" }
     if compactType == "Bool" { return "false" }
     if compactType == "String" || compactType == "Substring" {
       return context == .fake
-        ? nextLoremWord(used: &usedLoremWords)
+        ? nextLoremString(used: &fakeDefaultValues.strings)
         : ".init()"
     }
     if numericTypes.contains(compactType) {
-      return context == .fake ? "1" : ".zero"
+      return context == .fake ? nextNonZeroNumber(used: &fakeDefaultValues.numbers) : ".zero"
     }
     if compactType.hasPrefix("[") && compactType.hasSuffix("]") {
       return compactType.contains(":") ? "[:]" : "[]"
@@ -623,22 +631,47 @@ private extension PreviewableSourceGenerator {
     if compactType.hasPrefix("Dictionary<") { return "[:]" }
     if compactType == "Image" { return "Image(systemName: \"photo\")" }
     if compactType == "Date" { return ".now" }
-    if compactType == "UUID" { return "UUID()" }
-    if compactType == "URL" { return "URL(string: \"https://example.com\")!" }
+    if compactType == "UUID" {
+      return context == .fake ? nextFakeUUID(used: &fakeDefaultValues.uuids) : "UUID()"
+    }
+    if compactType == "URL" {
+      if context == .fake { return nextFakeURL(used: &fakeDefaultValues.urls) }
+      return "URL(string: \"https://example.com\")!"
+    }
     if let enumDefault = enumDefaults[compactType] { return enumDefault }
     return ".init()"
   }
 
-  static func nextLoremWord(used words: inout Set<String>) -> String {
+  static func nextLoremString(used strings: inout Set<String>) -> String {
     for _ in 0..<100 {
-      let word = Lorem.word
-      if words.insert(word).inserted {
-        return String(reflecting: word)
+      let wordCount = 2 + strings.count % 3
+      let string = Lorem.words(wordCount)
+      if strings.insert(string).inserted {
+        return String(reflecting: string)
       }
     }
-    let word = "\(Lorem.word)\(words.count + 1)"
-    words.insert(word)
-    return String(reflecting: word)
+    let string = "\(Lorem.words(2)) \(strings.count + 1)"
+    strings.insert(string)
+    return String(reflecting: string)
+  }
+
+  static func nextNonZeroNumber(used numbers: inout Set<Int>) -> String {
+    let number = (numbers.max() ?? 0) + 1
+    numbers.insert(number)
+    return String(number)
+  }
+
+  static func nextFakeURL(used urls: inout Set<Int>) -> String {
+    let number = (urls.max() ?? 0) + 1
+    urls.insert(number)
+    return "URL(string: \"https://fake.url.com/\(number)\")!"
+  }
+
+  static func nextFakeUUID(used uuids: inout Set<Int>) -> String {
+    let number = (uuids.max() ?? 0) + 1
+    uuids.insert(number)
+    let suffix = String(repeating: "0", count: max(0, 12 - String(number).count)) + String(number)
+    return "UUID(uuidString: \"00000000-0000-0000-0000-\(suffix)\")!"
   }
 
   static func indent(_ source: String, by spaces: Int) -> String {

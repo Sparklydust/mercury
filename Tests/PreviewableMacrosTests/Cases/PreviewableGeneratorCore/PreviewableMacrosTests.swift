@@ -148,7 +148,7 @@ struct PreviewableMacrosTests {
   }
 
   @Test
-  func generator_fakeHasTwoStrings_defaultsAreDistinctLoremWords() throws {
+  func generator_fakeHasTwoStrings_defaultsAreDistinctLoremStrings() throws {
     let generated = try PreviewableSourceGenerator.generate(from: [source])
     let defaults = generated.components(separatedBy: "\n").filter {
       $0.contains("value: String = \"")
@@ -158,7 +158,51 @@ struct PreviewableMacrosTests {
       && Set(defaults).count == 2
       && !generated.contains("LoremIpsum")
 
-    #expect(result, "String defaults must be two distinct generated lorem words.")
+    #expect(result, "String defaults must be distinct generated LoremSwiftum strings.")
+  }
+
+  @Test
+  func generator_fakeDefaults_areDistinctAndNonZero() throws {
+    let generated = try PreviewableSourceGenerator.generate(from: [
+      """
+      @PreviewableFake
+      struct FakeDefaults {
+        let firstNumber: Int
+        let secondNumber: Double
+        let title: String
+        let detail: String
+        let firstURL: URL
+        let secondURL: URL
+        let firstID: UUID
+        let secondID: UUID
+      }
+      """
+    ])
+    let stringDefaults: [String] = generated.components(separatedBy: "\n").compactMap { line in
+      guard line.contains(": String = \"") else { return nil }
+      let components = line.split(separator: "\"")
+      guard components.count > 1 else { return nil }
+      return String(components[1])
+    }
+    let wordCounts = stringDefaults.map { $0.split(separator: " ").count }
+    let usesDistinctURLs = generated.contains(
+      "firstURL: URL = URL(string: \"https://fake.url.com/1\")!"
+    ) && generated.contains(
+      "secondURL: URL = URL(string: \"https://fake.url.com/2\")!"
+    )
+    let usesDistinctUUIDs = generated.contains(
+      "firstID: UUID = UUID(uuidString: \"00000000-0000-0000-0000-000000000001\")!"
+    ) && generated.contains(
+      "secondID: UUID = UUID(uuidString: \"00000000-0000-0000-0000-000000000002\")!"
+    )
+    let result = generated.contains("firstNumber: Int = 1")
+      && generated.contains("secondNumber: Double = 2")
+      && usesDistinctURLs
+      && usesDistinctUUIDs
+      && Set(stringDefaults).count == 2
+      && Set(wordCounts) == Set([2, 3])
+
+    #expect(result, "Fake defaults must use distinct numbers, URLs, UUIDs, and short LoremSwiftum strings.")
   }
 
   @Test
