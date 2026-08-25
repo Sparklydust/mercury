@@ -175,6 +175,8 @@ struct PreviewableMacrosTests {
         let secondURL: URL
         let firstID: UUID
         let secondID: UUID
+        let firstDate: Date
+        let secondDate: Date
       }
       """
     ])
@@ -195,14 +197,21 @@ struct PreviewableMacrosTests {
     ) && generated.contains(
       "secondID: UUID = UUID(uuidString: \"00000000-0000-0000-0000-000000000002\")!"
     )
+    let usesDistinctDates = generated.contains(
+      "firstDate: Date = Date(timeIntervalSince1970: 1704067200)"
+    ) && generated.contains(
+      "secondDate: Date = Date(timeIntervalSince1970: 1704153600)"
+    )
     let result = generated.contains("firstNumber: Int = 1")
       && generated.contains("secondNumber: Double = 2")
       && usesDistinctURLs
       && usesDistinctUUIDs
+      && usesDistinctDates
+      && generated.contains("Generated `Date` values begin at `2024-01-01T00:00:00Z`")
       && Set(stringDefaults).count == 2
       && Set(wordCounts) == Set([2, 3])
 
-    #expect(result, "Fake defaults must use distinct numbers, URLs, UUIDs, and short LoremSwiftum strings.")
+    #expect(result, "Fake defaults must use distinct values that remain easy to identify and track.")
   }
 
   @Test

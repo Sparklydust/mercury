@@ -116,6 +116,7 @@ private extension PreviewableSourceGenerator {
     var numbers: Set<Int> = []
     var urls: Set<Int> = []
     var uuids: Set<Int> = []
+    var dates: Set<Int> = []
   }
 
   struct StoredProperty {
@@ -459,9 +460,18 @@ private extension PreviewableSourceGenerator {
       return "  \(property.name): \(property.name)\(comma)"
     }
     let body = ([".init("] + values + [")"]).joined(separator: "\n")
+    let dateDocumentation = properties.contains {
+      $0.type.filter { !$0.isWhitespace } == "Date"
+    }
+      ? """
+        ///
+        /// Generated `Date` values begin at `2024-01-01T00:00:00Z` and advance by one day in source order.
+        """
+      : String()
 
     let method = """
       /// Returns a fake `\(typeName)` with generated defaults or caller-provided stored-property values.
+      \(dateDocumentation)
       \(access)static func fake(
       \(indent(parameters, by: 2))
       ) -> \(typeName) {
@@ -630,7 +640,9 @@ private extension PreviewableSourceGenerator {
     if compactType.hasPrefix("Array<") || compactType.hasPrefix("Set<") { return "[]" }
     if compactType.hasPrefix("Dictionary<") { return "[:]" }
     if compactType == "Image" { return "Image(systemName: \"photo\")" }
-    if compactType == "Date" { return ".now" }
+    if compactType == "Date" {
+      return context == .fake ? nextFakeDate(used: &fakeDefaultValues.dates) : ".now"
+    }
     if compactType == "UUID" {
       return context == .fake ? nextFakeUUID(used: &fakeDefaultValues.uuids) : "UUID()"
     }
@@ -672,6 +684,13 @@ private extension PreviewableSourceGenerator {
     uuids.insert(number)
     let suffix = String(repeating: "0", count: max(0, 12 - String(number).count)) + String(number)
     return "UUID(uuidString: \"00000000-0000-0000-0000-\(suffix)\")!"
+  }
+
+  static func nextFakeDate(used dates: inout Set<Int>) -> String {
+    let dayOffset = dates.count
+    dates.insert(dayOffset)
+    let timestamp = 1_704_067_200 + dayOffset * 86_400
+    return "Date(timeIntervalSince1970: \(timestamp))"
   }
 
   static func indent(_ source: String, by spaces: Int) -> String {
