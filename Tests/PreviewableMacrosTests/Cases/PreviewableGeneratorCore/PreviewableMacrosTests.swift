@@ -101,8 +101,8 @@ struct PreviewableMacrosTests {
 
   // MARK: - Generator
   @Test(arguments: [
-    "#if DEBUG\n/// Shared double instance for testing and SwiftUI previews.",
-    "/// - Warning: Not intended for production use.",
+    "#if DEBUG\n/// A test double for `ServiceProtocol`.",
+    "/// - Important: Available only in Debug builds.",
     "// Mock values",
     "// Preview value",
     "// Spy values",
@@ -116,6 +116,7 @@ struct PreviewableMacrosTests {
     "var loadErrorStub: (any Error)?",
     "var loadStub: [String] = []",
     "passedParameters[#function] = [id]",
+    "/// The shared `ServiceDouble` for SwiftUI preview dependency injection.",
     "nonisolated var serviceDouble: any ServiceProtocol",
     "serviceDouble is unavailable outside Debug builds and SwiftUI previews"
   ])

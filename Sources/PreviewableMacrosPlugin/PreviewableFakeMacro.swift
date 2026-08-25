@@ -1,10 +1,10 @@
 import SwiftSyntax
 import SwiftSyntaxMacros
 
-/// Validates structure and class declarations annotated with `PreviewableFake`.
+/// Validates declarations annotated with `PreviewableFake` for fake-factory generation.
 struct PreviewableFakeMacro: ExtensionMacro {
 
-  /// Validates that the attached declaration supports Previewable fake generation.
+  /// Validates that the attached declaration supports fake-factory generation.
   /// - Throws: When the declaration is not a structure or class.
   static func expansion(
     of node: AttributeSyntax,

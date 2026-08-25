@@ -11,11 +11,12 @@ public macro PreviewableDouble() = #externalMacro(
   type: "PreviewableDoubleMacro"
 )
 
-/// Marks a structure or class for preview fake-factory generation.
+/// Marks a structure or class for fake-factory generation.
 ///
-/// Debug builds receive a `fake(...)` factory with individually overridable defaults. Other builds receive a trapping
-/// signature so SwiftUI previews remain type-checkable without constructing fake values. Classes with generated
-/// properties require mutable properties and an accessible parameterless initializer.
+/// The generated `fake(...)` factory returns an instance with generated defaults or caller-provided overrides in
+/// Debug builds, test targets, and SwiftUI previews. Its signature remains available in other builds for preview
+/// type checking, but invoking it traps.
+/// Classes with generated properties require mutable properties and an accessible parameterless initializer.
 @attached(extension, names: named(fake))
 public macro PreviewableFake() = #externalMacro(
   module: "PreviewableMacrosPlugin",
