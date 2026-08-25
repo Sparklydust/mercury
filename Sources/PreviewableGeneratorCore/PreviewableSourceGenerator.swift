@@ -101,6 +101,16 @@ private extension PreviewableSourceGenerator {
     let previewConfiguration: String
   }
 
+  struct GeneratedProperty {
+    let stub: String
+    let requirement: String
+  }
+
+  struct GeneratedMethod {
+    let stubs: [String]
+    let requirement: String
+  }
+
   struct StoredProperty {
     let name: String
     let type: String
@@ -166,24 +176,21 @@ private extension PreviewableSourceGenerator {
       : protocolName
     let doubleName = dependencyName + "Double"
     let access = accessPrefix(from: declaration.modifiers)
-    var members = [
-      "\(access)var calledMethods: [String] = []",
-      "\(access)var passedParameters: [String: [Any?]] = [:]",
-      "\(access)nonisolated init() {}",
-      "\(access)nonisolated static let preview = MainActor.assumeIsolated { \(doubleName)() }"
-    ]
+    var stubDeclarations: [String] = []
+    var requirementDeclarations: [String] = []
     var methodNames: Set<String> = []
 
     for member in declaration.memberBlock.members {
       if let variable = member.decl.as(VariableDeclSyntax.self) {
-        members.append(
-          contentsOf: try propertyDeclarations(
+        for property in try propertyDeclarations(
             from: variable,
             access: access,
             enumDefaults: enumDefaults,
             usedLoremWords: &usedLoremWords
-          )
-        )
+        ) {
+          stubDeclarations.append(property.stub)
+          requirementDeclarations.append(property.requirement)
+        }
         continue
       }
       if let function = member.decl.as(FunctionDeclSyntax.self) {
@@ -192,14 +199,14 @@ private extension PreviewableSourceGenerator {
             "@PreviewableDouble does not support overloaded requirement '\(function.name.text)'"
           )
         }
-        members.append(
-          try methodDeclaration(
+        let method = try methodDeclaration(
             from: function,
             access: access,
             enumDefaults: enumDefaults,
             usedLoremWords: &usedLoremWords
           )
-        )
+        stubDeclarations.append(contentsOf: method.stubs)
+        requirementDeclarations.append(method.requirement)
         continue
       }
       if member.decl.is(AssociatedTypeDeclSyntax.self)
@@ -210,21 +217,56 @@ private extension PreviewableSourceGenerator {
       }
     }
 
-    let body = members.map { indent($0, by: 2) }.joined(separator: "\n\n")
+    var sections: [String] = []
+    if !stubDeclarations.isEmpty {
+      sections.append(
+        (["// Mock values"] + stubDeclarations).joined(separator: "\n")
+      )
+    }
+    sections.append(
+      [
+        "// Preview value",
+        "/// The shared double used by previews.",
+        "\(access)nonisolated static let preview = MainActor.assumeIsolated { \(doubleName)() }"
+      ].joined(separator: "\n")
+    )
+    sections.append("\(access)nonisolated init() {}")
+    sections.append(
+      [
+        "// Spy values",
+        "/// The protocol method names invoked on this double.",
+        "\(access)private(set) var calledMethods: [String] = []",
+        "/// The arguments captured for each invoked protocol method.",
+        "\(access)private(set) var passedParameters: [String: [Any?]] = [:]"
+      ].joined(separator: "\n")
+    )
+    if !requirementDeclarations.isEmpty {
+      sections.append(
+        (["// Protocol requirements"] + requirementDeclarations)
+          .joined(separator: "\n")
+      )
+    }
+
+    let body = sections.map { indent($0, by: 2) }.joined(separator: "\n\n")
     let generatedDeclaration = """
+      /// Shared double instance for testing and SwiftUI previews.
+      ///
+      /// Instantiated once as a dummy, but can act as a mock or spy depending on the configured stubs and tracked
+      /// calls when used.
+      /// - Warning: Not intended for production use.
       \(access)final class \(doubleName): \(protocolName) {
+
       \(body)
       }
       """
-    let containerName = dependencyName.lowercasingFirstCharacter
-    let previewName = containerName + "Preview"
+    let doubleAccessorName = doubleName.lowercasingFirstCharacter
     let previewConfiguration = """
       @inline(__always)
-      \(access)nonisolated var \(previewName): any \(protocolName) {
+      \(access)nonisolated var \(doubleAccessorName): any \(protocolName) {
       #if DEBUG
         \(doubleName).preview
       #else
-        preconditionFailure("\(previewName) is unavailable outside Debug builds and SwiftUI previews")
+        preconditionFailure("\(doubleAccessorName) is unavailable outside Debug builds and SwiftUI previews")
       #endif
       }
       """
@@ -239,7 +281,7 @@ private extension PreviewableSourceGenerator {
     access: String,
     enumDefaults: [String: String],
     usedLoremWords: inout Set<String>
-  ) throws -> [String] {
+  ) throws -> [GeneratedProperty] {
     guard !isStatic(declaration.modifiers) else {
       throw GenerationError.message(
         "@PreviewableDouble does not support static property requirements"
@@ -264,13 +306,22 @@ private extension PreviewableSourceGenerator {
         enumDefaults: enumDefaults,
         usedLoremWords: &usedLoremWords
       )
+      let stub = "\(access)var \(name)Stub: \(type) = \(defaultValue)"
       if isSettable {
-        return "\(access)var \(name): \(type) = \(defaultValue)"
+        return GeneratedProperty(
+          stub: stub,
+          requirement: """
+            \(access)var \(name): \(type) {
+              get { \(name)Stub }
+              set { \(name)Stub = newValue }
+            }
+            """
+        )
       }
-      return """
-        \(access)var \(name)Stub: \(type) = \(defaultValue)
-        \(access)var \(name): \(type) { \(name)Stub }
-        """
+      return GeneratedProperty(
+        stub: stub,
+        requirement: "\(access)var \(name): \(type) { \(name)Stub }"
+      )
     }
   }
 
@@ -279,7 +330,7 @@ private extension PreviewableSourceGenerator {
     access: String,
     enumDefaults: [String: String],
     usedLoremWords: inout Set<String>
-  ) throws -> String {
+  ) throws -> GeneratedMethod {
     guard !isStatic(function.modifiers),
           function.genericParameterClause == nil,
           function.genericWhereClause == nil
@@ -337,14 +388,12 @@ private extension PreviewableSourceGenerator {
     }
     let methodBody = body.map { "  \($0)" }.joined(separator: "\n")
     let signature = functionSignature(from: function)
-    declarations.append(
-      """
+    let requirement = """
       \(access)func \(methodName)\(signature) {
       \(methodBody)
       }
       """
-    )
-    return declarations.joined(separator: "\n")
+    return GeneratedMethod(stubs: declarations, requirement: requirement)
   }
 
   static func generateFake(
@@ -586,7 +635,7 @@ private extension PreviewableSourceGenerator {
   static func indent(_ source: String, by spaces: Int) -> String {
     let prefix = String(repeating: " ", count: spaces)
     return source.split(separator: "\n", omittingEmptySubsequences: false)
-      .map { prefix + $0 }
+      .map { $0.isEmpty ? String() : prefix + $0 }
       .joined(separator: "\n")
   }
 

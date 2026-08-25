@@ -20,7 +20,7 @@ struct PreviewableMacrosTests {
 
     @PreviewableDouble
     protocol ServiceProtocol {
-      var state: Mode { get }
+      var state: Mode { get set }
       func load(id: Int) async throws -> [String]
     }
 
@@ -101,15 +101,23 @@ struct PreviewableMacrosTests {
 
   // MARK: - Generator
   @Test(arguments: [
-    "#if DEBUG\nfinal class ServiceDouble",
-    "var calledMethods: [String] = []",
-    "var passedParameters: [String: [Any?]] = [:]",
+    "#if DEBUG\n/// Shared double instance for testing and SwiftUI previews.",
+    "/// - Warning: Not intended for production use.",
+    "// Mock values",
+    "// Preview value",
+    "// Spy values",
+    "// Protocol requirements",
+    "/// The shared double used by previews.",
+    "/// The protocol method names invoked on this double.",
+    "private(set) var calledMethods: [String] = []",
+    "private(set) var passedParameters: [String: [Any?]] = [:]",
     "var stateStub: Mode = Mode.ready",
+    "var state: Mode {\n    get { stateStub }\n    set { stateStub = newValue }\n  }",
     "var loadErrorStub: (any Error)?",
     "var loadStub: [String] = []",
     "passedParameters[#function] = [id]",
-    "nonisolated var servicePreview: any ServiceProtocol",
-    "servicePreview is unavailable outside Debug builds and SwiftUI previews"
+    "nonisolated var serviceDouble: any ServiceProtocol",
+    "serviceDouble is unavailable outside Debug builds and SwiftUI previews"
   ])
   func generator_protocolIsAnnotated_expectedDoubleMemberIsGenerated(
     _ expected: String
@@ -171,7 +179,8 @@ struct PreviewableMacrosTests {
   }
 
   @Test(arguments: [
-    "func servicePreview(",
+    "servicePreview",
+    "func serviceDouble(",
     "func previewable()"
   ])
   func generator_protocolIsAnnotated_obsoleteAPIIsNotGenerated(
