@@ -1,3 +1,7 @@
+//
+// Copyright © 2026 Swissquote. See LICENSE file for terms. All rights reserved.
+//
+
 import SwiftCompilerPlugin
 import SwiftSyntaxMacros
 
@@ -5,9 +9,9 @@ import SwiftSyntaxMacros
 @main
 struct PreviewableMacrosPlugin: CompilerPlugin {
 
-  /// The macro implementations exposed by the plugin.
-  let providingMacros: [Macro.Type] = [
-    PreviewableDoubleMacro.self,
-    PreviewableFakeMacro.self
-  ]
+    /// The macro implementations exposed by the plugin.
+    let providingMacros: [Macro.Type] = [
+        PreviewableDoubleMacro.self,
+        PreviewableFakeMacro.self
+    ]
 }
