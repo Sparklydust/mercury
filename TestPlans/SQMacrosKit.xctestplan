@@ -20,7 +20,7 @@
   "testTargets" : [
     {
       "target" : {
-        "containerPath" : "container:",
+        "containerPath" : "container:..\/sqm-ios-macros",
         "identifier" : "SQMacrosKitTests",
         "name" : "SQMacrosKitTests"
       }

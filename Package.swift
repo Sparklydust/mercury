@@ -7,13 +7,14 @@ let package = Package(
     name: "sqm-ios-macros",
     platforms: [
         .iOS(.v16),
-        .macOS(.v26)
+        .macOS(.v15)
     ],
     products: [
         .library(name: "SQMacrosKit", targets: ["SQMacrosKit"]),
         .plugin(name: "PreviewableBuildToolPlugin", targets: ["PreviewableBuildToolPlugin"])
     ],
     dependencies: [
+        .package(url: "git@github.bank.swissquote.ch:sq/sqm-ios-plugins.git", from: "1.0.0"),
         .package(url: "https://github.com/lukaskubanek/LoremSwiftum.git", from: "2.2.1"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "603.0.0")
     ],
@@ -24,6 +25,9 @@ let package = Package(
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax")
+            ],
+            plugins: [
+                .plugin(name: "SwiftLintBuildPlugin", package: "sqm-ios-plugins")
             ]
         ),
         .target(name: "SQMacrosKit", dependencies: ["PreviewableMacrosPlugin"]),
@@ -33,6 +37,9 @@ let package = Package(
                 .product(name: "LoremSwiftum", package: "LoremSwiftum"),
                 .product(name: "SwiftParser", package: "swift-syntax"),
                 .product(name: "SwiftSyntax", package: "swift-syntax")
+            ],
+            plugins: [
+                .plugin(name: "SwiftLintBuildPlugin", package: "sqm-ios-plugins")
             ]
         ),
         .executableTarget(name: "PreviewableGenerator", dependencies: ["PreviewableGeneratorCore"]),
@@ -51,7 +58,10 @@ let package = Package(
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax")
             ],
-            plugins: ["PreviewableBuildToolPlugin"]
+            plugins: [
+                "PreviewableBuildToolPlugin",
+                .plugin(name: "SwiftLintBuildPlugin", package: "sqm-ios-plugins")
+            ]
         )
     ]
 )
