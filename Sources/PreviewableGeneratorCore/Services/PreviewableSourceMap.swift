@@ -10,6 +10,7 @@ struct PreviewableSourceMap {
   private let files: [PreviewableSourceFile]
   private let converters: [SourceLocationConverter]
 
+  /// Creates source-location converters for the supplied files.
   /// - Parameters:
   ///   - files: The module's source files, with the paths reported in diagnostics.
   ///   - trees: Their parsed syntax, in the same order — the two stay index-parallel.
@@ -22,11 +23,11 @@ struct PreviewableSourceMap {
 
   /// Wraps every generated declaration so the compiler reports its diagnostics on the annotation that asked for it.
   ///
-  /// The generator cannot check what it never read — an initializer declared in another module above all — so a
-  /// mismatch only surfaces once the generated file is compiled. Remapping the location turns "error in a file
-  /// buried in DerivedData" into "error on the annotation", which is the only place the developer can fix it.
-  ///
-  /// Each declaration is wrapped on its own, because they land in different sections of the generated file.
+  /// Each declaration receives an independent source-location directive because output sections differ.
+  /// Compiler diagnostics retain offsets within the generated declaration after the mapped starting line.
+  /// - Parameters:
+  ///   - generated: The declarations grouped by build configuration.
+  ///   - annotation: The source annotation to use as the compiler location.
   func attributed(
     _ generated: GeneratedPreviewable,
     to annotation: AnnotatedDeclaration
@@ -40,6 +41,9 @@ struct PreviewableSourceMap {
   }
 
   /// Returns the failure Xcode renders inline on the annotated declaration.
+  /// - Parameters:
+  ///   - message: The validation failure to report.
+  ///   - annotation: The declaration whose location identifies the failure.
   func diagnostic(_ message: String, for annotation: AnnotatedDeclaration) -> PreviewableDiagnostic {
     let converter = converters[annotation.fileIndex]
     let location = converter.location(for: annotation.absolutePosition)

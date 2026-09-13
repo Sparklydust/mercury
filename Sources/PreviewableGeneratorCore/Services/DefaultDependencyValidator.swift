@@ -2,6 +2,12 @@ import SwiftSyntax
 
 /// Rejects eager default cycles before generated initializers can recurse or deadlock.
 enum DefaultDependencyValidator {
+
+  /// Validates that eager default construction has no dependency cycle.
+  /// - Parameters:
+  ///   - index: The resolved fake recipes and protocol declarations.
+  ///   - sourceMap: The source locations used for validation failures.
+  /// - Throws: A source diagnostic for cyclic defaults or unreadable inherited requirements.
   static func validate(_ index: ModuleIndex, sourceMap: PreviewableSourceMap) throws {
     var edges: [String: Set<String>] = [:]
     for annotation in index.annotations {
@@ -48,6 +54,10 @@ enum DefaultDependencyValidator {
     for name in edges.keys.sorted() { try walk(name, path: []) }
   }
 
+  /// Returns annotated types constructed eagerly by the supplied type's default.
+  /// - Parameters:
+  ///   - type: The qualified type to inspect.
+  ///   - index: The available fake recipes and annotated protocols.
   private static func dependencies(_ type: TypeSyntax, index: ModuleIndex) -> [String] {
     if let attributed = type.as(AttributedTypeSyntax.self) { return dependencies(attributed.baseType, index: index) }
     if type.isOptional || type.isFunctionType || type.is(ArrayTypeSyntax.self) || type.is(DictionaryTypeSyntax.self) {

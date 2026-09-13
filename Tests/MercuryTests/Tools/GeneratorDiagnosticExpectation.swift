@@ -4,7 +4,8 @@
 
 import PreviewableGeneratorCore
 
-/// Returns the diagnostic raised while generating the supplied file, or `nil` when generation succeeds.
+/// Returns a source diagnostic, or `nil` when generation succeeds or throws another error type.
+/// - Parameter file: The source file to generate in isolation.
 func generatorDiagnostic(for file: PreviewableSourceFile) -> PreviewableDiagnostic? {
   do {
     _ = try PreviewableSourceGenerator.generate(from: [file])
@@ -16,7 +17,8 @@ func generatorDiagnostic(for file: PreviewableSourceFile) -> PreviewableDiagnost
   }
 }
 
-/// Returns the diagnostic message raised while generating the supplied source, or `nil` when generation succeeds.
+/// Returns the source diagnostic message, or `nil` if no source diagnostic is thrown.
+/// - Parameter source: The Swift text to generate using a synthetic file path.
 func generatorDiagnosticMessage(for source: String) -> String? {
   generatorDiagnostic(for: PreviewableSourceFile(path: "Source.swift", text: source))?.message
 }

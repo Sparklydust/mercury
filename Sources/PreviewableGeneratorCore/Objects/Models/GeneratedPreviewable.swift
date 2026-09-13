@@ -14,6 +14,10 @@ struct GeneratedPreviewable {
   /// Declarations emitted after the `#endif`, because they carry their own availability.
   var unconditional: [String] = []
 
+  /// Appends contributed declarations to each corresponding output section.
+  /// - Parameters:
+  ///   - accumulated: The output sections to extend.
+  ///   - contributed: The declarations to append in their existing order.
   static func += (accumulated: inout Self, contributed: Self) {
     accumulated.debug += contributed.debug
     accumulated.release += contributed.release

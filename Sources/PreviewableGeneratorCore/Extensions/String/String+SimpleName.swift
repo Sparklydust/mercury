@@ -11,7 +11,8 @@ extension String {
     split(separator: ".").last.map(String.init) ?? self
   }
 
-  /// Whether the string spells a bare Swift identifier, and so can be used as a generated parameter name.
+  /// Whether the string contains only letters, digits, and underscores, with no leading digit.
+  /// Swift keywords are not excluded by this lexical check.
   var isIdentifier: Bool {
     guard let first = unicodeScalars.first,
           CharacterSet.letters.contains(first) || first == "_"

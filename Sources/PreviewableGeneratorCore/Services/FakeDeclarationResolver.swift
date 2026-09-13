@@ -2,6 +2,12 @@ import SwiftSyntax
 
 /// Resolves fake construction once, before defaults or source are generated.
 enum FakeDeclarationResolver {
+
+  /// Validates an annotation and resolves its initializer, property types, and factory visibility.
+  /// - Parameters:
+  ///   - annotation: The fake annotation and its declaration.
+  ///   - index: Module declarations used to qualify types and validate access.
+  /// - Throws: `GenerationError` when the declaration or its construction contract is unsupported.
   static func resolve(_ annotation: AnnotatedDeclaration, index: ModuleIndex) throws -> ResolvedFake {
     if let extended = annotation.declaration.as(ExtensionDeclSyntax.self) {
       return try PreviewableExternalFakeGenerator.resolve(annotation, in: extended)

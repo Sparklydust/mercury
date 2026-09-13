@@ -6,8 +6,7 @@ import Foundation
 
 /// A build failure that points at the declaration responsible for it.
 ///
-/// The description uses the `path:line:column: error: message` form that Xcode parses, so the failure is
-/// reported inline on the offending declaration instead of as an opaque tool crash.
+/// The description uses `path:line:column: error: message` for compiler-compatible source diagnostics.
 public struct PreviewableDiagnostic: Error, CustomStringConvertible, Equatable, Sendable {
 
   /// The file containing the declaration.

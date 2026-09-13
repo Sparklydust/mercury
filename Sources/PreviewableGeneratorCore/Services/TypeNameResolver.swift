@@ -1,3 +1,7 @@
+//
+// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+//
+
 import SwiftSyntax
 
 /// Qualifies local type references before declarations move into a generated file.
@@ -6,6 +10,11 @@ final class TypeNameResolver: SyntaxRewriter {
   private let scope: [String]
   private let genericParameters: Set<String>
 
+  /// Creates a rewriter that preserves generic parameters while qualifying module-local types.
+  /// - Parameters:
+  ///   - index: The module declarations available for name lookup.
+  ///   - scope: Enclosing type names, ordered from outermost to innermost.
+  ///   - genericParameters: Names excluded from module lookup.
   init(index: ModuleIndex, scope: [String], genericParameters: Set<String> = []) {
     self.index = index
     self.scope = scope

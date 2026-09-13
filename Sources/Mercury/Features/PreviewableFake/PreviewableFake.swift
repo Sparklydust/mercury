@@ -21,18 +21,17 @@ public macro PreviewableFake() = #externalMacro(
 
 /// Marks an extension of a type declared outside this module for fake-factory generation.
 ///
-/// The build tool only reads the sources of the module it compiles, so it cannot discover the stored properties of a
-/// type another framework declares. List them in `parameters` instead, in the order the type's initializer expects them,
-/// and the generated `fake(...)` calls that initializer with the same generated defaults an owned type receives.
+/// The build tool reads only the current module. The `parameters` list supplies external initializer labels and
+/// types in call order. The generated factory applies the same default-resolution rules as module-local factories.
 ///
 /// ```swift
 /// @PreviewableFake(parameters: [("token", String.self), ("expirationDate", Date.self)])
 /// extension AppCheckToken {}
 /// ```
 ///
-/// Apply the macro to an unconstrained extension of a non-generic type, and keep `parameters` in step with the
-/// initializer being called: the build tool cannot check a signature it cannot read, so a mismatch surfaces as a
-/// compiler error inside the generated file.
+/// Requires an unconstrained extension of a non-generic type and a nonempty list of distinct parameter labels.
+/// Initializer signature mismatches are diagnosed when generated source is compiled.
+/// The factory traps outside Debug builds.
 /// - Parameters:
 ///   - parameters: The labels and types accepted by the external initializer.
 ///   - throwing: Whether the external initializer throws.

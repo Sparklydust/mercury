@@ -9,9 +9,14 @@ enum PreviewableFakeValidator {
 
   /// Checks that the initializer the generated factory calls actually exists.
   ///
-  /// The factory is emitted into an extension, so it can only reach an initializer the type already declares.
-  /// Catching the mismatch here reports it on the annotated declaration instead of leaving the compiler to
-  /// fail inside generated source the developer cannot open.
+  /// Accepts a matching accessible synchronous initializer or an applicable implicit initializer.
+  /// - Parameters:
+  ///   - members: The stored properties and initializers declared directly in the type.
+  ///   - typeName: The type name used in diagnostics.
+  ///   - isClass: Whether construction requires a parameterless class initializer.
+  ///   - properties: The factory inputs in initializer argument order.
+  /// - Returns: Whether the selected initializer throws.
+  /// - Throws: `GenerationError` when no usable initializer exists or multiple initializers match.
   static func validateInitializer(
     in members: MemberBlockItemListSyntax,
     of typeName: String,
@@ -82,6 +87,12 @@ enum PreviewableFakeValidator {
   /// A `public` structure may hold a property of an `internal` type — Swift only makes its memberwise initializer
   /// `internal` in turn. The generated factory has no such fallback: it takes the type's access, so the mismatch
   /// becomes an error in generated source unless it is caught here.
+  /// - Parameters:
+  ///   - typeName: The type receiving the factory.
+  ///   - access: The factory's intended visibility.
+  ///   - properties: The parameter types to check.
+  ///   - index: The declared access levels available in the module.
+  /// - Throws: `GenerationError` when a recognized parameter type is less visible than the factory.
   static func validateFactoryAccess(
     of typeName: String,
     access: AccessLevel,

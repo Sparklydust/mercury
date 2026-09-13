@@ -50,6 +50,8 @@ enum PreviewableSourceAssembler {
     return imports.sorted()
   }
 
+  /// Extracts imports while retaining their surrounding conditional compilation clauses.
+  /// - Parameter statements: Source statements to inspect recursively.
   private static func importsOnly(_ statements: CodeBlockItemListSyntax) -> [String] {
     statements.compactMap { statement in
       if let declaration = statement.item.as(ImportDeclSyntax.self) { return declaration.trimmedDescription }

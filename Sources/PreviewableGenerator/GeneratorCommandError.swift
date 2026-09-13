@@ -7,6 +7,7 @@ import Foundation
 /// A failure in how the generator was invoked, as opposed to one in the sources it read.
 enum GeneratorCommandError: Error, CustomStringConvertible {
 
+  /// The command was invoked without the destination file argument.
   case missingOutputPath
 
   var description: String {

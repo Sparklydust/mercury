@@ -1,6 +1,11 @@
+//
+// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+//
+
 import Testing
 
 struct ConcurrentDoubleBehaviourTests {
+
   @Test
   func double_callsAreConcurrent_everyInvocationIsRecorded() async throws {
     let double = ConcurrentServiceDouble()

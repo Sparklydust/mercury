@@ -7,6 +7,15 @@ import SwiftSyntaxMacrosGenericTestSupport
 import Testing
 
 /// Records macro-expansion differences as Swift Testing issues.
+/// - Parameters:
+///   - originalSource: The annotated Swift input.
+///   - expandedSource: The expected source after macro expansion.
+///   - diagnostics: Expected compiler diagnostics, in emission order.
+///   - macroSpecs: Macro names mapped to their expansion implementations.
+///   - fileID: The test file identifier reported for failures.
+///   - filePath: The test file path reported for failures.
+///   - line: The assertion call's source line.
+///   - column: The assertion call's source column.
 func expectMacroExpansion(
   _ originalSource: String,
   expandedSource: String,

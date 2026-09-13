@@ -7,11 +7,13 @@ import SwiftSyntax
 /// Generates the fake factory for a type declared outside this module, whose properties the annotation lists.
 enum PreviewableExternalFakeGenerator {
 
-  /// Generates a factory for a type this module extends but does not declare.
+  /// Resolves external construction from the parameter labels, types, and throwing flag in the annotation.
   ///
-  /// Nothing about the extended type can be read, so the developer's `parameters:` list stands in for the stored
-  /// properties an owned type exposes. A convenience initializer is never generated: the extended type already
-  /// owns its initializers, and adding one from another module could not reach its stored properties anyway.
+  /// The external initializer signature is checked when generated source is compiled.
+  /// - Parameters:
+  ///   - annotation: The attribute containing the explicit initializer contract.
+  ///   - declaration: The extension receiving the generated factory.
+  /// - Throws: `GenerationError` for unsupported extensions or malformed construction arguments.
   static func resolve(
     _ annotation: AnnotatedDeclaration,
     in declaration: ExtensionDeclSyntax

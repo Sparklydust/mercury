@@ -12,6 +12,11 @@ import SwiftSyntaxMacros
 struct PreviewableFakeMacro: PeerMacro {
 
   /// Validates that the attached declaration supports fake-factory generation.
+  /// - Parameters:
+  ///   - node: The attached macro attribute.
+  ///   - declaration: The declaration to validate.
+  ///   - context: The compiler expansion context; validation emits no peers.
+  /// - Returns: An empty peer list; the build tool generates the declarations.
   /// - Throws: When the declaration is neither a structure, a class nor an extension, or when it disagrees with
   ///   the presence of the `parameters:` argument.
   static func expansion(

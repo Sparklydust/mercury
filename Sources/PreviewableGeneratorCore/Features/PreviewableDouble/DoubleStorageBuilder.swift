@@ -2,6 +2,14 @@ import SwiftSyntax
 
 /// Renders synchronized storage without changing the names used to configure a double.
 enum DoubleStorageBuilder {
+
+  /// Renders backing storage and accessors synchronized by the double's recursive lock.
+  /// - Parameters:
+  ///   - name: The exposed configuration or recording property name.
+  ///   - type: The Swift type spelling of the stored value.
+  ///   - value: The initial value expression.
+  ///   - access: Access modifiers, including any required trailing space.
+  ///   - isolated: Whether setter assignments may omit the `Sendable` check.
   static func property(name: String, type: String, value: String, access: String, isolated: Bool) -> String {
     let check = isolated ? "" : "previewableRequireSendable(newValue)\n"
     return """
@@ -21,6 +29,10 @@ enum DoubleStorageBuilder {
   }
 
   /// Recognizes explicit global-actor isolation, including inherited protocol isolation.
+  /// - Parameters:
+  ///   - declaration: The protocol to inspect.
+  ///   - index: Protocol and global-actor declarations available in the module.
+  ///   - visited: Qualified protocol names already inspected during recursive lookup.
   static func isIsolated(_ declaration: ProtocolDeclSyntax, index: ModuleIndex, visited: Set<String> = []) -> Bool {
     let name = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
     let scope = name.split(separator: ".").map(String.init)

@@ -47,6 +47,13 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     )
   }
 
+  /// Validates protocol requirements and renders the double with its preview accessor.
+  /// - Parameters:
+  ///   - declaration: The annotated protocol.
+  ///   - qualifiedName: The protocol name qualified by its enclosing types.
+  ///   - index: Module declarations used for inheritance, isolation, and collision checks.
+  ///   - resolver: The state used to construct stub defaults.
+  /// - Throws: `GenerationError` for unsupported requirements, name conflicts, or unavailable defaults.
   private static func double(
     from declaration: ProtocolDeclSyntax,
     qualifiedName: String,
@@ -206,6 +213,9 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       previewConfiguration: previewConfiguration
     )
   }
+  /// Rejects requirement names that collide with generated storage, stubs, or recording members.
+  /// - Parameter members: The flattened protocol requirements.
+  /// - Throws: `GenerationError` when a requirement uses a reserved or generated name.
   private static func validateNames(in members: [MemberBlockItemSyntax]) throws {
     let reserved: Set<String> = ["preview", "calledMethods", "passedParameters"]
     var generated = reserved

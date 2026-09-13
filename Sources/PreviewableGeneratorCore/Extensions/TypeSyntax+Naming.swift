@@ -30,7 +30,7 @@ extension TypeSyntax {
     return self.is(FunctionTypeSyntax.self)
   }
 
-  /// Whether the type is optional in either spelling, and so already carries `nil` as a default.
+  /// Whether the type uses `T?` or `T!` syntax; generic `Optional<T>` syntax is excluded.
   var isOptional: Bool {
     self.is(OptionalTypeSyntax.self) || self.is(ImplicitlyUnwrappedOptionalTypeSyntax.self)
   }

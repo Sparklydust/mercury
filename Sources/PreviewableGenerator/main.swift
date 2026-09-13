@@ -8,8 +8,7 @@ import PreviewableGeneratorCore
 // The file holding an executable target's top-level code must be named `main.swift`, so this file carries the
 // invocation and nothing else.
 
-/// Reports failures in the `path:line:column: error: message` form Xcode renders inline, rather than letting
-/// the error escape as an unattributed top-level crash.
+// Source diagnostics retain their file location; invocation and I/O failures use an unlocated error message.
 do {
     try PreviewableGenerator.run()
 } catch let diagnostic as PreviewableDiagnostic {

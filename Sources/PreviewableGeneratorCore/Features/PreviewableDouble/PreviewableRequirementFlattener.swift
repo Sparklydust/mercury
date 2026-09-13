@@ -8,6 +8,11 @@ import SwiftSyntax
 enum PreviewableRequirementFlattener {
 
   /// Collects the protocol's own requirements followed by those of every base protocol declared in the module.
+  /// - Parameters:
+  ///   - declaration: The protocol whose requirements are collected.
+  ///   - index: The module declarations used for inheritance and type qualification.
+  ///   - visited: Qualified protocol names already traversed; updated to prevent duplicate traversal.
+  /// - Throws: `GenerationError` when an inherited non-marker protocol is absent from the module.
   static func requirements(
     of declaration: ProtocolDeclSyntax,
     index: ModuleIndex,

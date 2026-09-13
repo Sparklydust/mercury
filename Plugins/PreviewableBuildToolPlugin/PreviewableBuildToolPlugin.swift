@@ -9,7 +9,11 @@ import PackagePlugin
 @main
 struct PreviewableBuildToolPlugin: BuildToolPlugin {
 
-  /// Creates the source-generation command for a Swift package target.
+  /// Creates a source-generation command, or no commands for a target without Swift module sources.
+  /// - Parameters:
+  ///   - context: The package plugin context used to locate the generator and output directory.
+  ///   - target: The target whose Swift source files become generator inputs.
+  /// - Throws: When the generator tool cannot be located.
   func createBuildCommands(
     context: PluginContext,
     target: Target
@@ -22,6 +26,12 @@ struct PreviewableBuildToolPlugin: BuildToolPlugin {
     )
   }
 
+  /// Declares generation of one derived file with source inputs tracked by the build system.
+  /// - Parameters:
+  ///   - tool: The generator executable URL.
+  ///   - sourceFiles: The Swift inputs passed after the output path.
+  ///   - workDirectory: The plugin directory containing the derived output.
+  /// - Throws: No errors in the current implementation.
   private func commands(
     tool: URL,
     sourceFiles: [URL],
@@ -46,6 +56,10 @@ import XcodeProjectPlugin
 extension PreviewableBuildToolPlugin: XcodeBuildToolPlugin {
 
   /// Creates the source-generation command for an Xcode target.
+  /// - Parameters:
+  ///   - context: The Xcode plugin context used to locate the generator and output directory.
+  ///   - target: The target whose Swift source inputs are processed.
+  /// - Throws: When the generator tool cannot be located.
   func createBuildCommands(
     context: XcodePluginContext,
     target: XcodeTarget

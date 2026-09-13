@@ -6,13 +6,16 @@ import SwiftSyntax
 
 /// The declared visibility of a type, ordered from least to most visible.
 ///
-/// The generator needs the order rather than the spelling: a factory may never expose a type less visible than
-/// itself, and that is a comparison, not a string match.
+/// Ordering supports validation that factory parameter types are at least as visible as the factory.
 enum AccessLevel: Int, Comparable {
 
+  /// File-scoped access, combining `private` and `fileprivate` for generator checks.
   case restricted
+  /// Access within the current module.
   case `internal`
+  /// Access within the current package.
   case `package`
+  /// Access from importing modules, also representing `open` declarations.
   case `public`
 
   /// The keyword a developer would write for this level.

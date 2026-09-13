@@ -4,11 +4,9 @@
 
 import Foundation
 
-/// What one Previewable macro provides for the generator to emit its declarations.
+/// A feature that validates annotation conflicts and renders derived declarations.
 ///
-/// Adding a macro means adding a folder under `Features` whose generator conforms to this protocol, a case on
-/// `PreviewableAnnotation`, and the matching arm in `PreviewableSourceGenerator`. The compiler refuses to build
-/// until all three exist, which is why dispatch stays an exhaustive `switch` rather than a registry lookup.
+/// Conformers report conflicts against the full module and preserve the supplied resolver's allocation state.
 protocol PreviewableFeatureProtocol: Sendable {
 
   /// The annotation this feature generates for.

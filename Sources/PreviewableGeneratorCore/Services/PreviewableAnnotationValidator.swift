@@ -10,6 +10,7 @@ import Foundation
 /// failure aborts the run and a later, more explanatory conflict would never be reported.
 enum PreviewableAnnotationValidator {
 
+  /// Validates annotation locations and feature-specific conflicts.
   /// - Parameters:
   ///   - index: The module's declarations and annotations.
   ///   - features: The features to ask for conflicts, in the order their diagnostics take precedence.

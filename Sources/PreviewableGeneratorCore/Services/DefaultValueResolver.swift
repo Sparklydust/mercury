@@ -4,19 +4,22 @@
 
 import SwiftSyntax
 
-/// Synthesises a compilable default value for a requirement type.
+/// Resolves default expressions from type syntax and the module's annotated construction recipes.
 ///
-/// Resolution works on `TypeSyntax` rather than on the printed type, so tuples, closures and existentials are
-/// recognised structurally instead of by string matching. Anything that cannot be defaulted correctly raises a
-/// `GenerationError` naming the fix, rather than falling back to a `.init()` guess that fails to compile.
+/// Unsupported construction raises `GenerationError`. Fake value allocations and throwing effects update
+/// resolver state; callers reset the throwing flag before resolving each independent field.
 struct DefaultValueResolver {
 
+  /// The module declarations available for default construction.
   let index: ModuleIndex
+  /// The policy selecting neutral double defaults or populated fake defaults.
   let context: DefaultContext
 
   /// Generic parameter names of the enclosing declaration, which can never be defaulted.
   var genericParameters: Set<String> = []
+  /// The property or method name included in resolution failures.
   var fieldName = "default"
+  /// Whether resolution encountered an eager throwing factory since the caller last reset the flag.
   var usedThrowingDefault = false
 
   /// The distinct values already emitted.
@@ -28,6 +31,7 @@ struct DefaultValueResolver {
   }
 
   /// Returns a compilable default expression for the supplied type.
+  /// - Parameter type: The qualified type whose default expression is required.
   /// - Throws: `GenerationError` when no correct default can be synthesised.
   mutating func defaultValue(for type: TypeSyntax) throws -> String {
     if let attributed = type.as(AttributedTypeSyntax.self) {
@@ -69,10 +73,15 @@ struct DefaultValueResolver {
 
 extension DefaultValueResolver {
 
+  /// Extracts type arguments, returning an empty list when no generic clause is present.
+  /// - Parameter clause: The written generic argument clause.
   fileprivate func arguments(of clause: GenericArgumentClauseSyntax?) -> [TypeSyntax] {
     clause?.arguments.compactMap { TypeSyntax($0.argument) } ?? []
   }
 
+  /// Renders a closure whose result is generated when the closure is called.
+  /// - Parameter function: The closure signature to default.
+  /// - Throws: `GenerationError` for unavailable results or throwing construction in a nonthrowing closure.
   fileprivate mutating func closureLiteral(for function: FunctionTypeSyntax) throws -> String {
     let count = function.parameters.count
     let placeholders = Array(repeating: "_", count: count).joined(separator: ", ")
@@ -91,6 +100,9 @@ extension DefaultValueResolver {
     return count == 0 ? "{ \(value) }" : "{ \(placeholders) in \(value) }"
   }
 
+  /// Renders tuple element defaults while preserving labels and propagating eager throwing effects.
+  /// - Parameter tuple: The tuple or parenthesized type to default.
+  /// - Throws: `GenerationError` when an element has no supported default.
   fileprivate mutating func tupleLiteral(for tuple: TupleTypeSyntax) throws -> String {
     guard !tuple.elements.isEmpty else { return "()" }
     // A single unlabelled element is a parenthesised type, not a one-element tuple.
@@ -109,6 +121,12 @@ extension DefaultValueResolver {
     return "(\(elements.joined(separator: ", ")))"
   }
 
+  /// Resolves an enumeration, annotated declaration, or supported external type to a default expression.
+  /// - Parameters:
+  ///   - name: The qualified or written nominal type name.
+  ///   - simpleName: The final component used for known types and generated double names.
+  ///   - genericArguments: The written type arguments.
+  /// - Throws: `GenerationError` when the nominal type cannot be constructed automatically.
   fileprivate mutating func nominalDefault(
     named name: String,
     simpleName: String,
@@ -140,6 +158,11 @@ extension DefaultValueResolver {
     )
   }
 
+  /// Returns an expression for a supported built-in type, or `nil` when the name is unrecognized.
+  /// - Parameters:
+  ///   - name: The normalized type name used for built-in lookup.
+  ///   - genericArguments: Type arguments used to construct a `Result` success value.
+  /// - Throws: `GenerationError` when a nested success value has no supported default.
   fileprivate mutating func knownDefault(
     named name: String,
     genericArguments: [TypeSyntax]
@@ -170,6 +193,11 @@ extension DefaultValueResolver {
     }
   }
 
+  /// Returns a fresh double construction expression for an annotated protocol.
+  /// - Parameters:
+  ///   - name: The protocol name used to locate its annotation.
+  ///   - simpleName: The unqualified name used to derive the double name.
+  /// - Throws: `GenerationError` when the protocol lacks a double annotation.
   fileprivate func protocolDefault(named name: String, simpleName: String) throws -> String {
     guard index.annotatedProtocols[name] != nil else {
       throw GenerationError.message(
@@ -179,6 +207,11 @@ extension DefaultValueResolver {
     return "\(PreviewableDoubleNaming.doubleName(for: simpleName))()"
   }
 
+  /// Returns a fake factory call and records any eager throwing effect.
+  /// - Parameters:
+  ///   - name: The type name used for annotation lookup and the factory call.
+  ///   - simpleName: The unqualified type name; reserved by this resolver interface.
+  /// - Throws: `GenerationError` for generic types, missing annotations, or throwing defaults in doubles.
   fileprivate mutating func ownedTypeDefault(named name: String, simpleName: String) throws -> String {
     if index.genericTypes.contains(name) {
       throw GenerationError.message(
@@ -201,6 +234,7 @@ extension DefaultValueResolver {
     return "\(name).fake()"
   }
 
+  /// Type names supported by numeric default generation.
   fileprivate static let numericTypes: Set<String> = [
     "Double", "Float", "Float16", "Float32", "Float64", "Float80",
     "Int", "Int8", "Int16", "Int32", "Int64",

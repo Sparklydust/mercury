@@ -12,6 +12,8 @@ enum PreviewableStoredPropertyCollector {
   /// Private and file-private properties are deliberately excluded — reaching them would defeat the access
   /// control the developer asked for. They only block generation when they would also appear in the
   /// memberwise initializer, which the generated extension could then not call.
+  /// - Parameter members: The declarations directly contained in the annotated type.
+  /// - Throws: `GenerationError` for inaccessible initializer inputs or properties without a resolvable type.
   static func storedProperties(
     in members: MemberBlockItemListSyntax
   ) throws -> [StoredProperty] {
@@ -85,6 +87,8 @@ enum PreviewableStoredPropertyCollector {
     return .none
   }
 
+  /// Returns an explicit type or infers one from a direct call name or supported scalar literal.
+  /// - Parameter binding: The stored property binding to inspect.
   private static func inferredType(from binding: PatternBindingSyntax) -> TypeSyntax? {
     if let type = binding.typeAnnotation?.type { return type }
     guard let initializer = binding.initializer?.value else { return .none }

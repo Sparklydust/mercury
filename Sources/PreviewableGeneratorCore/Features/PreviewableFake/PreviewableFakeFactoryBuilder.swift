@@ -2,6 +2,13 @@ import SwiftSyntax
 
 /// Renders a resolved fake recipe with matching Debug and Release signatures.
 enum PreviewableFakeFactoryBuilder {
+
+  /// Renders the factory and any class convenience initializer from a validated recipe.
+  /// - Parameters:
+  ///   - recipe: The resolved initializer and ordered factory properties.
+  ///   - isThrowing: Whether initialization or an eager nested default can throw.
+  ///   - resolver: The default generator whose allocation state is retained across factories.
+  /// - Throws: `GenerationError` when a property default cannot be generated.
   static func factory(
     recipe: ResolvedFake,
     isThrowing: Bool,
@@ -85,6 +92,8 @@ enum PreviewableFakeFactoryBuilder {
     )
   }
 
+  /// Returns the parameter type, adding `@escaping` for a stored function value.
+  /// - Parameter property: The property supplied by the factory parameter.
   private static func parameterType(_ property: StoredProperty) -> String {
     let type = property.type.trimmedDescription
     return property.type.isFunctionType ? "@escaping \(type)" : type

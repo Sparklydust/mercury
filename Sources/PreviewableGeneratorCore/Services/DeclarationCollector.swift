@@ -6,13 +6,15 @@ import SwiftSyntax
 
 /// Collects every declaration the generator needs, at any nesting depth.
 ///
-/// A `SyntaxVisitor` is used rather than a scan of top-level statements so that no annotation can be missed:
-/// anything the visitor reaches is either generated or reported.
+/// Traversal includes nested declarations and records unsupported annotation locations for later validation.
 final class DeclarationCollector: SyntaxVisitor {
 
+  /// The declarations and annotations collected from the input file.
   private(set) var index = ModuleIndex()
   private let fileIndex: Int
 
+  /// Creates a collector that associates annotations with one input file.
+  /// - Parameter fileIndex: The file's zero-based position in the generation input.
   init(fileIndex: Int) {
     self.fileIndex = fileIndex
     super.init(viewMode: .sourceAccurate)
@@ -103,6 +105,14 @@ final class DeclarationCollector: SyntaxVisitor {
 
 extension DeclarationCollector {
 
+  /// Registers nominal type metadata and records any Previewable annotation.
+  /// - Parameters:
+  ///   - node: The syntax node used to determine lexical scope and source location.
+  ///   - name: The declared type name.
+  ///   - attributes: Attributes inspected for generation and global-actor annotations.
+  ///   - modifiers: The declared access modifiers.
+  ///   - isGeneric: Whether the type declares generic parameters.
+  ///   - declaration: The declaration retained for feature generation.
   fileprivate func visitNominal(
     node: some SyntaxProtocol,
     name: String,
@@ -128,6 +138,11 @@ extension DeclarationCollector {
     record(annotated, declaration: declaration, name: name, position: position, node: node)
   }
 
+  /// Indexes a protocol and records its qualified name when annotated for double generation.
+  /// - Parameters:
+  ///   - node: The protocol syntax retained for requirement lookup.
+  ///   - name: The unqualified protocol name.
+  ///   - position: The lexical scope used to qualify the name.
   fileprivate func register(
     protocol node: ProtocolDeclSyntax,
     named name: String,
@@ -141,6 +156,13 @@ extension DeclarationCollector {
     index.annotatedProtocols[qualifiedName] = qualifiedName
   }
 
+  /// Appends an annotation with its declaration and source location.
+  /// - Parameters:
+  ///   - annotated: The feature and original attribute syntax.
+  ///   - declaration: The declaration to validate and generate.
+  ///   - name: The declaration name used in diagnostics.
+  ///   - position: The declaration's lexical scope or unsupported location.
+  ///   - node: The syntax node that determines the diagnostic offset.
   fileprivate func record(
     _ annotated: (annotation: PreviewableAnnotation, attribute: AttributeSyntax),
     declaration: DeclSyntax,
@@ -161,6 +183,10 @@ extension DeclarationCollector {
     )
   }
 
+  /// Returns the qualified lookup key for a declaration.
+  /// - Parameters:
+  ///   - name: The declaration's written name.
+  ///   - position: The enclosing type scope, when supported.
   fileprivate static func keys(for name: String, at position: LexicalPosition) -> [String] {
     let qualifiedName = qualifiedName(for: name, at: position)
     return [qualifiedName]

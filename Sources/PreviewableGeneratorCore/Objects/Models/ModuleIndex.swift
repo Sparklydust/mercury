@@ -4,10 +4,9 @@
 
 import SwiftSyntax
 
-/// Everything the generator knows about the module being compiled.
+/// The declarations, annotations, and resolved factories available within one compilation module.
 ///
-/// The generator only ever sees one module's sources, so this index is what separates "declared here and
-/// therefore checkable" from "declared elsewhere and therefore taken on trust".
+/// Declarations from imported modules are not indexed.
 struct ModuleIndex {
 
   /// Protocol declarations keyed by qualified name.
@@ -35,6 +34,10 @@ struct ModuleIndex {
   var globalActors: Set<String> = []
 
   /// Resolves a written name from its innermost lexical scope outward.
+  /// - Parameters:
+  ///   - name: The written type or protocol name to resolve.
+  ///   - scope: Enclosing type names ordered from outermost to innermost.
+  /// - Returns: The first indexed qualified name, or `nil` if no candidate is indexed.
   func resolve(_ name: String, scope: [String]) -> String? {
     for count in stride(from: scope.count, through: 0, by: -1) {
       let candidate = (Array(scope.prefix(count)) + [name]).joined(separator: ".")
@@ -44,12 +47,14 @@ struct ModuleIndex {
     }
     return nil
   }
+
   /// Returns whether the module declares the supplied type name.
   func declaresType(_ name: String) -> Bool {
     declaredTypes.contains(name)
   }
 
   /// Folds the declarations found in one file into the module-wide index.
+  /// - Parameter other: Collected declarations to append; existing keyed entries take precedence.
   mutating func merge(_ other: ModuleIndex) {
     protocols.merge(other.protocols) { current, _ in current }
     annotatedProtocols.merge(other.annotatedProtocols) { current, _ in current }

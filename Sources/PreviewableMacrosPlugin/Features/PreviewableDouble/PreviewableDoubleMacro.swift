@@ -9,6 +9,11 @@ import SwiftSyntaxMacros
 struct PreviewableDoubleMacro: PeerMacro {
 
   /// Validates that the attached declaration supports Previewable double generation.
+  /// - Parameters:
+  ///   - node: The attached macro attribute.
+  ///   - declaration: The declaration to validate.
+  ///   - context: The compiler expansion context; validation emits no peers.
+  /// - Returns: An empty peer list; the build tool generates the declarations.
   /// - Throws: When the declaration is not a supported protocol.
   static func expansion(
     of node: AttributeSyntax,

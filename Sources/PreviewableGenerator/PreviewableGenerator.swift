@@ -9,7 +9,8 @@ import PreviewableGeneratorCore
 enum PreviewableGenerator {
 
   /// Reads the requested Swift sources and writes their generated Previewable declarations.
-  /// - Throws: When the output path is missing, a source cannot be read, or output cannot be written.
+  /// The first command-line argument is the output path; remaining arguments are input paths.
+  /// - Throws: For a missing output path, invalid source declarations, or file read and write failures.
   static func run() throws {
     let arguments = Array(CommandLine.arguments.dropFirst())
     guard let outputPath = arguments.first else { throw GeneratorCommandError.missingOutputPath }
