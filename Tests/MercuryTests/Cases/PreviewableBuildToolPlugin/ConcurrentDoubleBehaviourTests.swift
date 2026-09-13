@@ -4,31 +4,34 @@
 
 import Testing
 
+@Suite
 struct ConcurrentDoubleBehaviourTests {
+
+  private let sut = ConcurrentServiceDouble()
 
   @Test
   func double_callsAreConcurrent_everyInvocationIsRecorded() async throws {
-    let double = ConcurrentServiceDouble()
+    let expected = Array(0..<1_000)
 
     try await withThrowingTaskGroup(of: String.self) { group in
-      for key in 0..<1_000 { group.addTask { try await double.load(key: key) } }
+      for key in expected { group.addTask { try await sut.load(key: key) } }
       for try await _ in group {}
     }
-    let result = double.passedParameters["load(key:)"]?.compactMap { $0.first as? Int }.sorted()
+    let result = sut.passedParameters["load(key:)"]?.compactMap { $0.first as? Int }.sorted()
 
-    #expect(result == Array(0..<1_000))
+    #expect(result == expected, "Concurrent invocations must preserve every supplied key.")
   }
 
   @Test
   func double_errorsAreQueued_concurrentCallsConsumeEachErrorOnce() async {
-    let double = ConcurrentServiceDouble()
-    double.loadErrorsStub = Array(repeating: ConstructionError.invalid, count: 100)
+    let expected = 100
+    sut.loadErrorsStub = Array(repeating: ConstructionError.invalid, count: expected)
 
     let result = await withTaskGroup(of: Int.self) { group in
       for key in 0..<200 {
         group.addTask {
           do {
-            _ = try await double.load(key: key)
+            _ = try await sut.load(key: key)
             return 0
           } catch { return 1 }
         }
@@ -36,62 +39,63 @@ struct ConcurrentDoubleBehaviourTests {
       return await group.reduce(0, +)
     }
 
-    #expect(result == 100)
+    #expect(result == expected, "Each queued error must be consumed exactly once.")
   }
 
   @Test
   func double_queueIsMutatedConcurrently_everyAppendIsPreserved() async {
-    let double = ConcurrentServiceDouble()
+    let expected = 200
 
     await withTaskGroup(of: Void.self) { group in
-      for _ in 0..<200 { group.addTask { double.loadErrorsStub.append(ConstructionError.invalid) } }
+      for _ in 0..<expected { group.addTask { sut.loadErrorsStub.append(ConstructionError.invalid) } }
     }
-    let result = double.loadErrorsStub.count
+    let result = sut.loadErrorsStub.count
 
-    #expect(result == 200)
+    #expect(result == expected, "Concurrent queue mutations must retain every append.")
   }
 
   @Test
-  func double_parentsAreConstructed_nestedDefaultsAreIndependent() {
+  func double_parentsAreConstructed_nestedDefaultsAreIndependent() throws {
     let first = ParentServiceDouble()
     let second = ParentServiceDouble()
+    let childDouble = try #require(first.child as? ChildServiceDouble)
+    let expected = 0
 
-    (first.child as? ChildServiceDouble)?.count = 42
+    childDouble.count = 42
     let result = second.child.count
 
-    #expect(result == 0)
+    #expect(result == expected, "Mutating one parent must leave another parent's child unchanged.")
   }
 
   @Test
   func genericMethod_responsesHaveDifferentTypes_eachTypeKeepsItsResponse() async throws {
-    let double = ConcurrentServiceDouble()
-    double.makeStub.set("value", for: String.self)
-    double.makeStub.set(42, for: Int.self)
+    let expected = ("value", 42)
+    sut.makeStub.set(expected.0, for: String.self)
+    sut.makeStub.set(expected.1, for: Int.self)
 
-    let result = (try await double.make(String.self), try await double.make(Int.self))
+    let result = (try await sut.make(String.self), try await sut.make(Int.self))
 
-    #expect(result == ("value", 42))
+    #expect(result == expected, "Each concrete return type must retain its own response.")
   }
 
   @Test
   func genericMethod_optionalNilIsConfigured_nilIsReturned() async throws {
-    let double = ConcurrentServiceDouble()
-    double.makeStub.set(nil, for: String?.self)
+    sut.makeStub.set(nil, for: String?.self)
 
-    let result = try await double.make(String?.self)
+    let result = try await sut.make(String?.self)
 
-    #expect(result == nil)
+    #expect(result == nil, "An explicitly configured optional nil must be returned.")
   }
 
   @Test
-  func genericMethod_responseIsReplaced_newResponseIsReturned() async throws {
-    let double = ConcurrentServiceDouble()
-    double.makeStub.set(1, for: Int.self)
-    double.makeStub.remove(for: Int.self)
-    double.makeStub.set(2, for: Int.self)
+  func genericMethod_responseIsRemovedAndReconfigured_newResponseIsReturned() async throws {
+    let expected = 2
+    sut.makeStub.set(1, for: Int.self)
+    sut.makeStub.remove(for: Int.self)
+    sut.makeStub.set(expected, for: Int.self)
 
-    let result = try await double.make(Int.self)
+    let result = try await sut.make(Int.self)
 
-    #expect(result == 2)
+    #expect(result == expected, "Reconfiguration after removal must return the new response.")
   }
 }

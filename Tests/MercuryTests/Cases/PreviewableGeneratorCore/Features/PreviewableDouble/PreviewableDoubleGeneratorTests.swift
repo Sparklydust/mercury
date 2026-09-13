@@ -5,7 +5,6 @@
 import PreviewableGeneratorCore
 import Testing
 
-/// Covers the double `@PreviewableDouble` generates from a protocol.
 @Suite
 struct PreviewableDoubleGeneratorTests {
 
@@ -78,7 +77,7 @@ struct PreviewableDoubleGeneratorTests {
   func generator_protocolInheritsInModuleProtocol_requirementsAreFlattened(
     _ expected: String
   ) throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       """
       @PreviewableDouble
       protocol BaseProtocol {
@@ -91,7 +90,9 @@ struct PreviewableDoubleGeneratorTests {
         var name: String { get }
       }
       """
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       result.contains(expected),
@@ -99,29 +100,30 @@ struct PreviewableDoubleGeneratorTests {
     )
   }
 
-  @Test
-  func generator_requirementRethrows_errorIsNotReplayed() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
-      """
+  @Test(arguments: [
+    ("func map(_ transform: () throws -> Int) rethrows -> Int {", true),
+    ("mapErrorStub", false),
+  ])
+  func generator_requirementRethrows_signatureAndErrorStorageMatchContract(
+    _ fragment: String,
+    _ expected: Bool
+  ) throws {
+    let source = """
       @PreviewableDouble
       protocol MappingProtocol {
         func map(_ transform: () throws -> Int) rethrows -> Int
       }
       """
-    ])
 
-    let keepsSignature = result.contains("func map(_ transform: () throws -> Int) rethrows -> Int {")
-    let hasNoErrorStub = !result.contains("mapErrorStub")
+    let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let result = generated.contains(fragment)
 
-    #expect(
-      keepsSignature && hasNoErrorStub,
-      "A `rethrows` requirement may only throw from its closure argument, so no error stub can exist."
-    )
+    #expect(result == expected, "Presence of `\(fragment)` must match the rethrows contract.")
   }
 
   @Test
   func generator_requirementHasTypedThrows_stubMatchesTheThrownType() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       """
       enum MappingError: Error { case broken }
 
@@ -130,7 +132,9 @@ struct PreviewableDoubleGeneratorTests {
         func load() throws(MappingError) -> Int
       }
       """
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       result.contains("var loadErrorStub: (MappingError)?"),
@@ -140,14 +144,16 @@ struct PreviewableDoubleGeneratorTests {
 
   @Test
   func generator_requirementIsRestated_itIsGeneratedOnce() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       """
       protocol BaseProtocol { func load() -> Int }
 
       @PreviewableDouble
       protocol RefinedProtocol: BaseProtocol { func load() -> Int }
       """
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       result.components(separatedBy: "func load() -> Int {").count == 2,
@@ -156,64 +162,67 @@ struct PreviewableDoubleGeneratorTests {
   }
 
   @Test
-  func generator_methodIsCalledTwice_everyInvocationIsRecorded() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
-      "@PreviewableDouble\nprotocol ServiceProtocol { func load(id: Int) }"
-    ])
+  func generator_requirementHasTypedThrows_errorQueueMatchesTheThrownType() throws {
+    let source = """
+      @PreviewableDouble
+      protocol MappingProtocol { func load() throws(MappingError) -> Int }
+      enum MappingError: Error { case broken }
+      """
+    let expected = "loadErrorsStub: [MappingError] = []"
 
-    #expect(
-      result.contains("passedParameters[#function, default: []].append([id])"),
-      "Arguments must accumulate per invocation, matching the calls recorded in `calledMethods`."
-    )
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "The error queue must use the requirement's declared error type.")
   }
 
   @Test
   func generator_requirementThrows_errorQueueIsConsumedBeforeTheStoredError() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
-      """
+    let source = """
       @PreviewableDouble
-      protocol MappingProtocol {
-        func load() throws(MappingError) -> Int
-      }
-
+      protocol MappingProtocol { func load() throws(MappingError) -> Int }
       enum MappingError: Error { case broken }
       """
-    ])
 
-    let declaresQueue = result.contains("loadErrorsStub: [MappingError] = []")
-    let queued = result.range(of: "if !self.loadErrorsStub.isEmpty")
-    let stored = result.range(of: "if let loadErrorStub")
-    let consumesQueueFirst = queued != nil && stored != nil && queued!.lowerBound < stored!.lowerBound
+    let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let queued = try #require(generated.range(of: "if !self.loadErrorsStub.isEmpty"))
+    let stored = try #require(generated.range(of: "if let loadErrorStub"))
+    let result = queued.lowerBound < stored.lowerBound
 
-    #expect(
-      declaresQueue && consumesQueueFirst,
-      "The queue must carry the thrown type and be consumed before the stored error."
-    )
+    #expect(result, "The queued error check must precede the persistent error check.")
   }
 
   @Test
-  func generator_doubleIsGenerated_onlyDebugBuildsDeclareIt() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
-      "@PreviewableDouble\nprotocol ServiceProtocol { var name: String { get set } }"
-    ])
-    let unconditionalSource = result.components(separatedBy: "#if DEBUG").first ?? String()
+  func generator_doubleIsGenerated_declarationIsInsideDebugSection() throws {
+    let source = "@PreviewableDouble\nprotocol ServiceProtocol { var name: String { get set } }"
 
-    let isDebugOnly = !unconditionalSource.contains("ServiceDouble")
-    let accessorCompilesEverywhere =
-      result.contains("nonisolated var serviceDouble: ServiceDouble")
-      && result.contains("nonisolated var serviceDouble: any ServiceProtocol")
+    let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let debug = try #require(generated.range(of: "#if DEBUG"))
+    let release = try #require(generated.range(of: "#else"))
+    let declaration = try #require(generated.range(of: "final class ServiceDouble"))
+    let result = (debug.upperBound..<release.lowerBound).contains(declaration.lowerBound)
 
-    #expect(
-      isDebugOnly && accessorCompilesEverywhere,
-      "Production code must never reach a double, while the accessor injecting it must still compile."
-    )
+    #expect(result, "The double declaration must appear within the Debug branch.")
+  }
+
+  @Test(arguments: [
+    "nonisolated var serviceDouble: ServiceDouble",
+    "nonisolated var serviceDouble: any ServiceProtocol",
+  ])
+  func generator_doubleIsGenerated_accessorHasConfigurationSpecificType(_ expected: String) throws {
+    let source = "@PreviewableDouble\nprotocol ServiceProtocol { var name: String { get set } }"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "The accessor must provide the expected configuration-specific type.")
   }
 
   @Test
   func generator_protocolRequiresParameterlessInitializer_noDuplicateWitnessIsGenerated() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       "@PreviewableDouble\nprotocol FeedProtocol { init() }"
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       result.components(separatedBy: "init()").count == 2,

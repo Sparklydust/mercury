@@ -1,7 +1,13 @@
+//
+// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+//
+
 import PreviewableGeneratorCore
 import Testing
 
+@Suite
 struct DefaultConstructionDiagnosticsTests {
+
   @Test(arguments: [
     (
       "struct ServiceDouble {}\n@PreviewableDouble protocol ServiceProtocol {}",
@@ -46,6 +52,6 @@ struct DefaultConstructionDiagnosticsTests {
   func generator_defaultCannotBeConstructed_diagnosticExplainsFailure(_ source: String, _ expected: String) {
     let result = generatorDiagnosticMessage(for: source)
 
-    #expect(result?.contains(expected) == true)
+    #expect(result?.contains(expected) == true, "The diagnostic must contain `\(expected)`.")
   }
 }

@@ -9,85 +9,121 @@ import Testing
 struct PreviewableFakeBehaviourTests {
 
   @Test
-  func fake_noArgumentsAreGiven_defaultsAreDistinct() {
-    let account = Account.fake()
+  func fake_stringHasNoOverride_defaultIsPopulated() {
+    let result = Account.fake().owner
 
-    let result = account.owner.isEmpty == false
-    && account.owner != account.label
-    && account.openedAt != account.closedAt
-    && account.identifier != UUID()
-
-    #expect(result, "Generated fake defaults must be populated and distinct.")
+    #expect(!result.isEmpty, "The owner default must be populated.")
   }
 
   @Test
-  func fake_valuesAreProvided_overridesAreApplied() {
-    let account = Account.fake(owner: "Roland", balance: 1_250.5)
+  func fake_stringsHaveNoOverrides_defaultsAreDistinct() {
+    let sut = Account.fake()
+    let result = sut.owner != sut.label
+
+    #expect(result, "Separate string fields must receive distinct defaults.")
+  }
+
+  @Test
+  func fake_datesHaveNoOverrides_defaultsAreDistinct() {
+    let sut = Account.fake()
+    let result = sut.openedAt != sut.closedAt
+
+    #expect(result, "Separate date fields must receive distinct defaults.")
+  }
+
+  @Test
+  func fake_identifierHasNoOverride_defaultIsNonzero() {
+    let result = Account.fake().identifier
 
     #expect(
-      account.owner == "Roland" && account.balance == 1_250.5,
-      "A developer must be able to supply the values a preview or test needs."
-    )
+      result != UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+      "The identifier default must differ from the zero UUID.")
   }
 
   @Test
   func fake_propertyIsOwnedType_nestedFakeIsUsed() {
-    let portfolio = Portfolio.fake()
+    let result = Portfolio.fake().account.owner
 
-    #expect(
-      portfolio.account.owner.isEmpty == false,
-      "A stored property of an owned type must be filled from that type's fake."
-    )
-  }
-
-  @Test
-  func fake_typeIsNested_factoryIsQualified() {
-    let order = Trading.Order.fake(symbol: "SQ")
-
-    #expect(order.symbol == "SQ", "A nested type must expose its fake through its qualified name.")
-  }
-
-  @Test
-  func fake_typeIsGeneric_callerSuppliesGenericValue() {
-    let page = Page.fake(element: 42)
-
-    #expect(page.element == 42, "A generic fake must accept the caller's value.")
-  }
-
-  @Test
-  func fake_typeIsClass_convenienceInitializerIsAvailable() {
-    let session = Session.fake(token: "token")
-
-    #expect(session.token == "token", "A class fake must be constructible with overrides.")
-  }
-
-  @Test @MainActor
-  func fake_typeIsGloballyIsolated_factoryIsUsableOnThatActor() {
-    let state = ViewState.fake(title: "Markets")
-
-    #expect(
-      state.title == "Markets",
-      "A globally isolated type must stay constructible from its own actor, where its initializer lives."
-    )
-  }
-
-  @Test
-  func fake_typeIsDeclaredOutsideTheModule_declaredParametersBecomeFactoryParameters() {
-    let locale = Locale.fake(identifier: "fr_CH")
-
-    #expect(
-      locale.identifier == "fr_CH",
-      "A type the generator cannot read must still be constructible through its declared parameters."
-    )
+    #expect(!result.isEmpty, "A nested owned type must receive a populated fake.")
   }
 
   @Test
   func fake_externalMemberIsOptional_defaultIsNil() {
-    let item = URLQueryItem.fake(name: "symbol")
+    let result = URLQueryItem.fake(name: "symbol").value
 
-    #expect(
-      item.name == "symbol" && item.value == nil,
-      "A declared optional member must default to nil, exactly like an owned optional property."
-    )
+    #expect(result == nil, "An external optional parameter must default to nil.")
+  }
+
+  @Test
+  func fake_ownerIsProvided_overrideIsApplied() {
+    let expected = "Roland"
+
+    let result = Account.fake(owner: expected).owner
+
+    #expect(result == expected, "The factory must apply the owner override.")
+  }
+
+  @Test
+  func fake_balanceIsProvided_overrideIsApplied() {
+    let expected = 1_250.5
+
+    let result = Account.fake(balance: expected).balance
+
+    #expect(result == expected, "The factory must apply the balance override.")
+  }
+
+  @Test
+  func fake_typeIsNested_factoryIsQualified() {
+    let expected = "SQ"
+
+    let result = Trading.Order.fake(symbol: expected).symbol
+
+    #expect(result == expected, "The nested factory must accept the supplied symbol.")
+  }
+
+  @Test
+  func fake_typeIsGeneric_callerSuppliesGenericValue() {
+    let expected = 42
+
+    let result = Page.fake(element: expected).element
+
+    #expect(result == expected, "The generic factory must accept the supplied value.")
+  }
+
+  @Test
+  func fake_typeIsClass_convenienceInitializerAppliesOverride() {
+    let expected = "token"
+
+    let result = Session.fake(token: expected).token
+
+    #expect(result == expected, "The class factory must apply the token override.")
+  }
+
+  @MainActor
+  @Test
+  func fake_typeIsGloballyIsolated_factoryIsUsableOnThatActor() {
+    let expected = "Markets"
+
+    let result = ViewState.fake(title: expected).title
+
+    #expect(result == expected, "The isolated factory must apply its override.")
+  }
+
+  @Test
+  func fake_typeIsExternal_declaredParameterIsApplied() {
+    let expected = "fr_CH"
+
+    let result = Locale.fake(identifier: expected).identifier
+
+    #expect(result == expected, "The external factory must pass the identifier to its initializer.")
+  }
+
+  @Test
+  func fake_externalRequiredMemberIsProvided_overrideIsApplied() {
+    let expected = "symbol"
+
+    let result = URLQueryItem.fake(name: expected).name
+
+    #expect(result == expected, "The external factory must apply its required argument.")
   }
 }

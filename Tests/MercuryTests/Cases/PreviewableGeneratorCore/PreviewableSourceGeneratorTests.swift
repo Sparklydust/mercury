@@ -9,37 +9,56 @@ import Testing
 struct PreviewableSourceGeneratorTests {
 
   @Test
-  func generator_declarationIsUnsupported_diagnosticPointsAtTheSourceLine() throws {
+  func generator_declarationIsUnsupported_diagnosticIncludesSourceLocation() throws {
     let file = PreviewableSourceFile(
       path: "Service.swift",
       text: """
-            import Foundation
+        import Foundation
 
-            @PreviewableDouble
-            protocol ServiceProtocol: Codable { var name: String { get } }
-            """
+        @PreviewableDouble
+        protocol ServiceProtocol: Codable { var name: String { get } }
+        """
     )
+    let expected = ("Service.swift", 3, 1)
 
     let diagnostic = try #require(generatorDiagnostic(for: file))
+    let result = (diagnostic.path, diagnostic.line, diagnostic.column)
 
-    #expect(diagnostic.path == "Service.swift")
-    #expect(diagnostic.line == 3)
-    #expect(diagnostic.description.hasPrefix("Service.swift:3:1: error: "))
+    #expect(result == expected, "The diagnostic must identify the annotation's file, line, and column.")
+  }
+
+  @Test
+  func generator_declarationIsUnsupported_diagnosticDescriptionUsesCompilerFormat() throws {
+    let file = PreviewableSourceFile(
+      path: "Service.swift",
+      text: """
+        import Foundation
+
+        @PreviewableDouble
+        protocol ServiceProtocol: Codable { var name: String { get } }
+        """
+    )
+    let expected = "Service.swift:3:1: error: "
+
+    let diagnostic = try #require(generatorDiagnostic(for: file))
+    let result = diagnostic.description
+
+    #expect(result.hasPrefix(expected), "The diagnostic description must use the compiler's source-location format.")
   }
 
   @Test(arguments: [
-        """
-        enum Namespace {
-          @PreviewableDouble
-          protocol ServiceProtocol { var name: String { get } }
-        }
-        """,
-        """
-        enum Namespace {
-          @PreviewableFake
-          struct Model { let value: String }
-        }
-        """
+    """
+    enum Namespace {
+      @PreviewableDouble
+      protocol ServiceProtocol { var name: String { get } }
+    }
+    """,
+    """
+    enum Namespace {
+      @PreviewableFake
+      struct Model { let value: String }
+    }
+    """,
   ])
   func generator_declarationIsNested_outputIsGenerated(_ source: String) throws {
     let result = try PreviewableSourceGenerator.generate(from: [source])
@@ -52,32 +71,36 @@ struct PreviewableSourceGeneratorTests {
 
   @Test
   func generator_declarationIsInsideConditionalCompilation_diagnosticIsEmitted() {
-    let message = generatorDiagnosticMessage(for: """
-            #if DEBUG
-            @PreviewableDouble
-            protocol ServiceProtocol { var name: String { get } }
-            #endif
-            """)
+    let source = """
+      #if DEBUG
+      @PreviewableDouble
+      protocol ServiceProtocol { var name: String { get } }
+      #endif
+      """
+
+    let result = generatorDiagnosticMessage(for: source)
 
     #expect(
-      message?.contains("declared inside a #if block") == true,
+      result?.contains("declared inside a #if block") == true,
       "A declaration the generator never visits must name the reason rather than be silently skipped."
     )
   }
 
   @Test
   func generator_declarationIsGenerated_diagnosticsAreRemappedOntoTheAnnotation() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       PreviewableSourceFile(
         path: "Models.swift",
         text: """
-                import Foundation
+          import Foundation
 
-                @PreviewableFake
-                struct Model { let value: String }
-                """
+          @PreviewableFake
+          struct Model { let value: String }
+          """
       )
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       result.contains("#sourceLocation(file: \"Models.swift\", line: 3)"),
@@ -87,13 +110,15 @@ struct PreviewableSourceGeneratorTests {
 
   @Test
   func generator_declarationIsGenerated_remappingIsClosedAfterEachDeclaration() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       "@PreviewableFake\nstruct Model { let value: String }"
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       result.components(separatedBy: "#sourceLocation()").count
-      == result.components(separatedBy: "#sourceLocation(file:").count,
+        == result.components(separatedBy: "#sourceLocation(file:").count,
       "Every remapping must be closed, or it would swallow the declarations that follow it."
     )
   }

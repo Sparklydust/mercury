@@ -40,39 +40,39 @@ struct PreviewableFakeGeneratorTests {
     )
   }
 
-  @Test
-  func generator_fakeIsBuiltOutsideDebug_factoryTerminatesWithoutValues() throws {
+  @Test(arguments: [
+    ("extension Model", true),
+    ("value: String = { () -> String in preconditionFailure(", true),
+    ("preconditionFailure(\"Model.fake(...) is unavailable", true),
+    (".init(", false),
+  ])
+  func generator_fakeIsBuiltOutsideDebug_factoryContainsOnlyUnavailableConstruction(
+    _ fragment: String,
+    _ expected: Bool
+  ) throws {
     let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let releaseSource = try #require(
+      generated.components(separatedBy: "#else\n").dropFirst().first?
+        .components(separatedBy: "#endif").first
+    )
+    let result = releaseSource.contains(fragment)
 
-    let releaseSource =
-      generated
-      .components(separatedBy: "#else\n")
-      .dropFirst()
-      .first?
-      .components(separatedBy: "#endif")
-      .first
-    let result =
-      releaseSource?.contains("extension Model") == true
-      && releaseSource?.contains("value: String = { () -> String in preconditionFailure(") == true
-      && releaseSource?.contains("preconditionFailure(\"Model.fake(...) is unavailable") == true
-      && releaseSource?.contains(".init(") == false
-
-    #expect(result, "Release fake factories must terminate without constructing preview values.")
+    #expect(result == expected, "Release factory source must match the expected presence of `\(fragment)`.")
   }
 
   @Test
   func generator_genericFieldHasNoDefault_diagnosticIsEmitted() {
-    let result = generatorDiagnosticMessage(
-      for:
-        "@PreviewableFake\nstruct Page<Element> { let element: Element; let index: Int }"
-    )
+    let source = "@PreviewableFake\nstruct Page<Element> { let element: Element; let index: Int }"
+    let expected = "cannot synthesise a default for generic parameter 'Element'"
 
-    #expect(result?.contains("cannot synthesise a default for generic parameter 'Element'") == true)
+    let result = generatorDiagnosticMessage(for: source)
+
+    #expect(result?.contains(expected) == true, "The diagnostic must identify the unsupported generic default.")
   }
 
   @Test
   func generator_propertyIsPrivateWithValue_itStaysPrivate() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       """
       @PreviewableFake
       struct Preferences {
@@ -80,7 +80,9 @@ struct PreviewableFakeGeneratorTests {
         let locale: String
       }
       """
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       !result.contains("storageKey"),
@@ -88,10 +90,12 @@ struct PreviewableFakeGeneratorTests {
     )
   }
 
-  @Test
-  func generator_typeIsOpen_generatedMembersArePublic() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
-      """
+  @Test(arguments: [
+    ("open ", false),
+    ("public static func fake(", true),
+  ])
+  func generator_typeIsOpen_generatedMembersUseSupportedAccess(_ fragment: String, _ expected: Bool) throws {
+    let source = """
       @PreviewableFake
       open class Portfolio {
         open var title: String = ""
@@ -99,17 +103,21 @@ struct PreviewableFakeGeneratorTests {
         public init() {}
       }
       """
-    ])
 
-    #expect(
-      !result.contains("open ") && result.contains("public static func fake("),
-      "`open` applies to neither a static factory nor an extension member, so it must widen to `public`."
-    )
+    let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let result = generated.contains(fragment)
+
+    #expect(result == expected, "Generated members must replace open access with public access.")
   }
 
   @Test
   func generator_publicTypeHoldsLessVisibleType_diagnosticNamesBoth() {
-    let message = generatorDiagnosticMessage(
+    let expected = """
+      @PreviewableFake cannot generate a public factory for 'Wrapper': its 'helper' parameter \
+      uses the internal type 'Helper' — raise 'Helper' to public
+      """
+
+    let result = generatorDiagnosticMessage(
       for: """
         @PreviewableFake
         struct Helper { let identifier: Int }
@@ -119,17 +127,14 @@ struct PreviewableFakeGeneratorTests {
         """)
 
     #expect(
-      message == """
-        @PreviewableFake cannot generate a public factory for 'Wrapper': its 'helper' parameter \
-        uses the internal type 'Helper' — raise 'Helper' to public
-        """,
+      result == expected,
       "A public factory cannot take an internal parameter, so the mismatch must be reported here."
     )
   }
 
   @Test
   func generator_publicTypeHoldsPublicType_factoryIsGenerated() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       """
       @PreviewableFake
       public struct Helper { public let identifier: Int }
@@ -137,7 +142,9 @@ struct PreviewableFakeGeneratorTests {
       @PreviewableFake
       public struct Wrapper { public let helper: Helper }
       """
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       result.contains("public static func fake(\n    helper: Helper = Helper.fake()"),
@@ -150,7 +157,7 @@ struct PreviewableFakeGeneratorTests {
     "convenience init(\n    onDone: @escaping () -> Void",
   ])
   func generator_propertyIsAClosure_factoryParameterEscapes(_ expected: String) throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       """
       @PreviewableFake
       final class HandlerModel {
@@ -160,7 +167,9 @@ struct PreviewableFakeGeneratorTests {
         init() {}
       }
       """
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       result.contains(expected),
@@ -170,14 +179,16 @@ struct PreviewableFakeGeneratorTests {
 
   @Test
   func generator_propertyIsAnOptionalClosure_factoryParameterDoesNotEscape() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
+    let sources = [
       """
       @PreviewableFake
       struct MaybeModel {
         let onDone: (() -> Void)?
       }
       """
-    ])
+    ]
+
+    let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
       !result.contains("@escaping"),

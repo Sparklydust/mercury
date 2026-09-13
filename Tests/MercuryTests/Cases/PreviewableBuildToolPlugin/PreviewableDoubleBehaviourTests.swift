@@ -8,176 +8,264 @@ import Testing
 @Suite
 struct PreviewableDoubleBehaviourTests {
 
-  private struct SampleError: Error {}
+  private let sut = CatalogueServiceDouble()
 
-  // MARK: - Stubbing
   @Test
-  func double_stubIsAssigned_requirementReturnsStub() {
-    let double = CatalogueServiceDouble()
+  func double_titleStubIsAssigned_requirementReturnsStub() {
+    let expected = "Portfolio"
+    sut.titleStub = expected
 
-    double.titleStub = "Portfolio"
-    double.tagsStub = ["equity", "bond"]
-    double.stateStub = .loading
+    let result = sut.title
 
-    let result = double.title == "Portfolio"
-    && double.tags == ["equity", "bond"]
-    && double.state == .loading
+    #expect(result == expected, "The title must equal its configured stub.")
+  }
 
-    #expect(result, "Assigning a stub must change what the requirement returns.")
+  @Test
+  func double_tagsStubIsAssigned_requirementReturnsStub() {
+    let expected = ["equity", "bond"]
+    sut.tagsStub = expected
+
+    let result = sut.tags
+
+    #expect(result == expected, "The tags must equal their configured stub.")
+  }
+
+  @Test
+  func double_stateStubIsAssigned_requirementReturnsStub() {
+    let expected = LoadingState.loading
+    sut.stateStub = expected
+
+    let result = sut.state
+
+    #expect(result == expected, "The state must equal its configured stub.")
   }
 
   @Test
   func double_requirementIsSettable_writeReachesStub() {
-    let double = CatalogueServiceDouble()
+    let expected = 42
 
-    double.count = 42
+    sut.count = expected
+    let result = sut.countStub
 
-    #expect(double.countStub == 42, "A settable requirement must write through to its stub.")
+    #expect(result == expected, "A settable requirement must update its stub.")
   }
 
   @Test
   func double_requirementIsInherited_stubIsGenerated() {
-    let double = CatalogueServiceDouble()
-    let identifier = UUID()
+    let expected = UUID(uuidString: "00000000-0000-0000-0000-000000000042")!
+    sut.identifierStub = expected
 
-    double.identifierStub = identifier
+    let result = sut.identifier
 
-    #expect(
-      double.identifier == identifier,
-      "A requirement inherited from a base protocol must be stubbable on the derived double."
-    )
-  }
-
-  // MARK: - Spying
-  @Test
-  func double_methodIsCalled_invocationIsRecorded() async throws {
-    let double = CatalogueServiceDouble()
-    double.loadStub = ["first"]
-
-    let loaded = try await double.load(page: 7)
-    double.reset()
-
-    let result = loaded == ["first"]
-    && double.calledMethods == ["load(page:)", "reset()"]
-    && double.passedParameters["load(page:)"]?.first?.first as? Int == 7
-
-    #expect(result, "Calls must be recorded with their arguments, including inherited requirements.")
+    #expect(result == expected, "An inherited requirement must return its configured stub.")
   }
 
   @Test
-  func double_methodIsCalledTwice_everyInvocationIsRecorded() async throws {
-    let double = CatalogueServiceDouble()
+  func double_methodIsCalled_configuredResponseIsReturned() async throws {
+    let expected = ["first"]
+    sut.loadStub = expected
 
-    _ = try await double.load(page: 1)
-    _ = try await double.load(page: 2)
+    let result = try await sut.load(page: 7)
 
-    let recorded = double.passedParameters["load(page:)"]
-    let result = recorded?.count == 2
-    && recorded?.first?.first as? Int == 1
-    && recorded?.last?.first as? Int == 2
+    #expect(result == expected, "The method must return its configured response.")
+  }
 
-    #expect(result, "Each invocation must keep its own arguments rather than overwrite the previous ones.")
+  @Test
+  func double_methodsAreCalled_invocationsAreRecordedInOrder() async throws {
+    let expected = ["load(page:)", "reset()"]
+
+    _ = try await sut.load(page: 7)
+    sut.reset()
+    let result = sut.calledMethods
+
+    #expect(result == expected, "Invocation records must preserve call order, including inherited methods.")
+  }
+
+  @Test
+  func double_methodIsCalled_argumentIsRecorded() async throws {
+    let expected = 7
+
+    _ = try await sut.load(page: expected)
+    let result = sut.passedParameters["load(page:)"]?.first?.first as? Int
+
+    #expect(result == expected, "The invocation must record the supplied argument.")
+  }
+
+  @Test
+  func double_methodIsCalledTwice_everyArgumentIsRecorded() async throws {
+    let expected = [1, 2]
+
+    for page in expected {
+      _ = try await sut.load(page: page)
+    }
+    let result = sut.passedParameters["load(page:)"]?.compactMap { $0.first as? Int }
+
+    #expect(result == expected, "Repeated calls must retain each argument in order.")
   }
 
   @Test
   func double_errorStubIsAssigned_methodThrows() async {
-    let double = CatalogueServiceDouble()
-    double.loadErrorStub = SampleError()
+    sut.loadErrorStub = ConstructionError.invalid
 
-    await #expect(throws: SampleError.self) {
-      _ = try await double.load(page: 1)
+    await #expect(throws: ConstructionError.invalid) {
+      _ = try await sut.load(page: 1)
     }
   }
 
   @Test
-  func double_errorsStubIsAssigned_onlyTheQueuedCallsThrow() async throws {
-    let double = CatalogueServiceDouble()
-    double.loadErrorsStub = [SampleError(), SampleError()]
+  func double_errorsStubIsAssigned_queuedFailuresAreFollowedBySuccess() async throws {
+    sut.loadErrorsStub = [ConstructionError.invalid, ConstructionError.invalid]
+    let expected: [ConstructionError?] = [.invalid, .invalid, nil]
 
-    await #expect(throws: SampleError.self) { _ = try await double.load(page: 1) }
-    await #expect(throws: SampleError.self) { _ = try await double.load(page: 2) }
-    let recovered = try await double.load(page: 3)
+    var result: [ConstructionError?] = []
+    for page in 1...3 {
+      do {
+        _ = try await sut.load(page: page)
+        result.append(nil)
+      } catch let error as ConstructionError {
+        result.append(error)
+      }
+    }
 
-    #expect(
-      recovered == double.loadStub,
-      "A queued error must be consumed per call, so a retrying caller can eventually succeed."
-    )
+    #expect(result == expected, "Each queued error must be consumed once before a later call succeeds.")
   }
 
   @Test
-  func accessor_stubIsAssignedThroughIt_theInjectedDoubleSeesIt() {
-    publicServiceDouble.nameStub = "Markets"
+  func double_publicProtocolIsInjected_configuredStubIsReturned() {
+    let serviceDouble = PublicServiceDouble()
+    let expected = "Markets"
+    serviceDouble.nameStub = expected
 
-    let injected: any PublicServiceProtocol = publicServiceDouble
+    let injected: any PublicServiceProtocol = serviceDouble
+    let result = injected.name
 
-    #expect(
-      injected.name == "Markets",
-      "A preview must configure stubs through the accessor it injects, or it cannot arrange anything."
-    )
+    #expect(result == expected, "Protocol injection must retain the configured public double.")
   }
 
   @Test
-  func double_protocolRequiresInitializer_witnessIsGeneratedAndRecorded() {
-    let double = FactoryDouble(name: "feed")
+  func double_protocolRequiresInitializer_invocationIsRecorded() {
+    let expected = ["init(name:)"]
 
-    #expect(
-      double.calledMethods == ["init(name:)"]
-      && double.passedParameters["init(name:)"]?.first?.first as? String == "feed",
-      "An initializer requirement must be witnessed, and recorded like every other requirement."
-    )
+    let sut = FactoryDouble(name: "feed")
+    let result = sut.calledMethods
+
+    #expect(result == expected, "The initializer witness must record its invocation.")
   }
 
   @Test
-  func double_methodTakesClosure_callIsRecordedWithoutCapturingIt() {
-    let double = CatalogueServiceDouble()
+  func double_protocolRequiresInitializer_argumentIsRecorded() {
+    let expected = "feed"
 
-    double.observe(handler: { _ in }, token: "abc")
+    let sut = FactoryDouble(name: "feed")
+    let result = sut.passedParameters["init(name:)"]?.first?.first as? String
 
-    let result = double.calledMethods == ["observe(handler:token:)"]
-    && double.passedParameters["observe(handler:token:)"]?.count == 1
-    && double.passedParameters["observe(handler:token:)"]?.first?.count == 1
-    && double.passedParameters["observe(handler:token:)"]?.first?.first as? String == "abc"
-
-    #expect(result, "A non-escaping closure argument must be skipped, not stored.")
+    #expect(result == expected, "The initializer witness must record its argument.")
   }
 
-  // MARK: - Composite defaults
   @Test
-  func double_requirementIsComposite_defaultIsUsable() {
-    let double = CompositionServiceDouble()
+  func double_methodTakesClosure_onlyNonFunctionArgumentsAreRecorded() {
+    let expected = ["abc"]
 
-    double.onChange()
-    let result = double.transform(1).isEmpty
-    && double.coordinate == (0, 0)
-    && double.delegate is IdentifiableServiceDouble
-    && double.owned.owner.isEmpty == false
+    sut.observe(handler: { _ in }, token: "abc")
+    let result = sut.passedParameters["observe(handler:token:)"]?.first?.map { $0 as? String }
 
-    #expect(result, "Closures, tuples, existentials and owned types must have working defaults.")
+    #expect(result == expected, "The argument record must exclude the function argument.")
   }
 
-  // MARK: - Preview accessors
+  @Test
+  func double_methodTakesClosure_invocationIsRecorded() {
+    let expected = ["observe(handler:token:)"]
+
+    sut.observe(handler: { _ in }, token: "abc")
+    let result = sut.calledMethods
+
+    #expect(result == expected, "A method with a function argument must still record its invocation.")
+  }
+
+  @Test
+  func double_voidClosureHasDefault_invocationCompletes() {
+    let sut = CompositionServiceDouble()
+
+    #expect(throws: Never.self) {
+      sut.onChange()
+    }
+  }
+
+  @Test
+  func double_closureReturnsString_defaultIsEmpty() {
+    let sut = CompositionServiceDouble()
+
+    let result = sut.transform(1)
+
+    #expect(result.isEmpty, "A default transform must return an empty string.")
+  }
+
+  @Test
+  func double_requirementIsTuple_elementsDefaultToZero() {
+    let sut = CompositionServiceDouble()
+
+    let result = sut.coordinate
+
+    #expect(result == (0, 0), "The tuple default must contain zero-valued elements.")
+  }
+
+  @Test
+  func double_requirementIsExistential_defaultIsConformingDouble() {
+    let sut = CompositionServiceDouble()
+
+    let result = sut.delegate
+
+    #expect(result is IdentifiableServiceDouble, "The existential default must be a conforming generated double.")
+  }
+
+  @Test
+  func double_requirementIsOwnedType_defaultIsPopulatedFake() {
+    let sut = CompositionServiceDouble()
+
+    let result = sut.owned.owner
+
+    #expect(!result.isEmpty, "An owned type must receive a populated fake.")
+  }
+
   @Test
   func accessor_isRead_sharedDoubleIsReturned() {
-    let first = catalogueServiceDouble
-    let second = catalogueServiceDouble
+    let expected = CatalogueServiceDouble.preview
 
-    #expect(
-      first === second,
-      "The accessor must hand back the one shared preview double."
-    )
+    let result = catalogueServiceDouble
+
+    #expect(result === expected, "The accessor must return the shared preview instance.")
+  }
+
+  @Test
+  func accessor_publicProtocolIsRead_sharedDoubleIsReturned() {
+    let expected = PublicServiceDouble.preview
+
+    let result = publicServiceDouble
+
+    #expect(result === expected, "The public accessor must return the shared preview instance.")
   }
 
   @MainActor
   @Test
-  func accessor_protocolIsMainActorIsolated_doubleIsUsable() {
-    let double = PresentationServiceDouble()
-    double.headlineStub = "Markets"
+  func double_protocolIsMainActorIsolated_stubIsReturned() {
+    let sut = PresentationServiceDouble()
+    let expected = "Markets"
+    sut.headlineStub = expected
 
-    double.present()
+    let result = sut.headline
 
-    #expect(
-      double.headline == "Markets" && double.calledMethods == ["present()"],
-      "A globally isolated protocol must produce a usable double."
-    )
+    #expect(result == expected, "The isolated requirement must return its stub.")
+  }
+
+  @MainActor
+  @Test
+  func double_protocolIsMainActorIsolated_invocationIsRecorded() {
+    let sut = PresentationServiceDouble()
+    let expected = ["present()"]
+
+    sut.present()
+    let result = sut.calledMethods
+
+    #expect(result == expected, "The isolated double must record its method calls.")
   }
 }

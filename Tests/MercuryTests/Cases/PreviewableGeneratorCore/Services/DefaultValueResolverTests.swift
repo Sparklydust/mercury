@@ -32,6 +32,22 @@ struct DefaultValueResolverTests {
     }
     """
 
+  private let fakeDefaultsSource = """
+    @PreviewableFake
+    struct FakeDefaults {
+      let firstNumber: Int
+      let secondNumber: Double
+      let title: String
+      let detail: String
+      let firstURL: URL
+      let secondURL: URL
+      let firstID: UUID
+      let secondID: UUID
+      let firstDate: Date
+      let secondDate: Date
+    }
+    """
+
   // MARK: - Resolver
   @Test(arguments: [
     "onChangeStub: () -> Void = { }",
@@ -53,92 +69,68 @@ struct DefaultValueResolverTests {
   }
 
   @Test
-  func resolver_fakeHasTwoStrings_defaultsAreDistinctLoremStrings() throws {
-    let generated = try PreviewableSourceGenerator.generate(from: [
-      """
+  func resolver_stringsBelongToDifferentFactories_defaultsAreDistinct() throws {
+    let source = """
       @PreviewableFake
-      struct Model {
-        let value: String
-      }
+      struct Model { let value: String }
 
       @PreviewableFake
       final class ReferenceModel {
         var value = String()
-
         init() {}
       }
       """
-    ])
-    let defaults = generated.components(separatedBy: "\n").filter {
-      $0.contains("value: String = \"")
-    }
+    let expected = 2
 
-    let result =
-      defaults.count == 2
-      && Set(defaults).count == 2
-      && !generated.contains("LoremIpsum")
+    let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let defaults = generated.components(separatedBy: "\n").filter { $0.contains("value: String = \"") }
+    let result = Set(defaults).count
 
-    #expect(result, "String defaults must be distinct generated LoremSwiftum strings.")
+    #expect(result == expected, "Separate factories must receive distinct string defaults.")
+  }
+
+  @Test(arguments: [
+    "firstNumber: Int = 1",
+    "secondNumber: Double = 2",
+    "firstURL: URL = URL(string: \"https://fake.url.com/1\")!",
+    "secondURL: URL = URL(string: \"https://fake.url.com/2\")!",
+    "firstID: UUID = UUID(uuidString: \"00000000-0000-0000-0000-000000000001\")!",
+    "secondID: UUID = UUID(uuidString: \"00000000-0000-0000-0000-000000000002\")!",
+    "firstDate: Date = Date(timeIntervalSince1970: 1704067200)",
+    "secondDate: Date = Date(timeIntervalSince1970: 1704153600)",
+    "Generated `Date` values begin at `2024-01-01T00:00:00Z`",
+  ])
+  func resolver_fakeHasScalarFields_defaultsFollowAllocationOrder(_ expected: String) throws {
+    let result = try PreviewableSourceGenerator.generate(from: [fakeDefaultsSource])
+
+    #expect(result.contains(expected), "Generated defaults must contain `\(expected)`.")
   }
 
   @Test
-  func resolver_fakeDefaults_areDistinctAndNonZero() throws {
-    let generated = try PreviewableSourceGenerator.generate(from: [
-      """
-      @PreviewableFake
-      struct FakeDefaults {
-        let firstNumber: Int
-        let secondNumber: Double
-        let title: String
-        let detail: String
-        let firstURL: URL
-        let secondURL: URL
-        let firstID: UUID
-        let secondID: UUID
-        let firstDate: Date
-        let secondDate: Date
-      }
-      """
-    ])
-    let stringDefaults: [String] = generated.components(separatedBy: "\n").compactMap { line in
-      guard line.contains(": String = \"") else { return .none }
-      let components = line.split(separator: "\"")
-      guard components.count > 1 else { return .none }
-      return String(components[1])
-    }
-    let wordCounts = stringDefaults.map { $0.split(separator: " ").count }
-    let usesDistinctURLs =
-      generated.contains(
-        "firstURL: URL = URL(string: \"https://fake.url.com/1\")!"
-      )
-      && generated.contains(
-        "secondURL: URL = URL(string: \"https://fake.url.com/2\")!"
-      )
-    let usesDistinctUUIDs =
-      generated.contains(
-        "firstID: UUID = UUID(uuidString: \"00000000-0000-0000-0000-000000000001\")!"
-      )
-      && generated.contains(
-        "secondID: UUID = UUID(uuidString: \"00000000-0000-0000-0000-000000000002\")!"
-      )
-    let usesDistinctDates =
-      generated.contains(
-        "firstDate: Date = Date(timeIntervalSince1970: 1704067200)"
-      )
-      && generated.contains(
-        "secondDate: Date = Date(timeIntervalSince1970: 1704153600)"
-      )
-    let result =
-      generated.contains("firstNumber: Int = 1")
-      && generated.contains("secondNumber: Double = 2")
-      && usesDistinctURLs
-      && usesDistinctUUIDs
-      && usesDistinctDates
-      && generated.contains("Generated `Date` values begin at `2024-01-01T00:00:00Z`")
-      && Set(stringDefaults).count == 2
-      && Set(wordCounts) == Set([2, 3])
+  func resolver_fakeHasTwoStrings_defaultsAreDistinct() throws {
+    let expected = 2
 
-    #expect(result, "Fake defaults must use distinct values that remain easy to identify and track.")
+    let generated = try PreviewableSourceGenerator.generate(from: [fakeDefaultsSource])
+    let result = Set(generatedStringDefaults(in: generated)).count
+
+    #expect(result == expected, "Each string field must receive a distinct value.")
+  }
+
+  @Test
+  func resolver_fakeHasTwoStrings_wordCountsFollowAllocationOrder() throws {
+    let expected = [2, 3]
+
+    let generated = try PreviewableSourceGenerator.generate(from: [fakeDefaultsSource])
+    let result = generatedStringDefaults(in: generated).map { $0.split(separator: " ").count }
+
+    #expect(result == expected, "Successive string allocations must contain two and three words.")
+  }
+
+  @Test
+  func resolver_fakeHasStrings_obsoletePlaceholderIsAbsent() throws {
+    let result = try PreviewableSourceGenerator.generate(from: [fakeDefaultsSource])
+
+    #expect(!result.contains("LoremIpsum"), "String defaults must not use the obsolete placeholder.")
   }
 
   @Test(arguments: [
@@ -186,11 +178,11 @@ struct DefaultValueResolverTests {
     _ source: String,
     _ expected: String
   ) {
-    let message = generatorDiagnosticMessage(for: source)
+    let result = generatorDiagnosticMessage(for: source)
 
     #expect(
-      message?.contains(expected) == true,
-      "Expected a diagnostic containing `\(expected)`, got `\(message ?? "no diagnostic")`."
+      result?.contains(expected) == true,
+      "Expected a diagnostic containing `\(expected)`, got `\(result ?? "no diagnostic")`."
     )
   }
 

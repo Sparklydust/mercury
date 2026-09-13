@@ -108,11 +108,11 @@ struct PreviewableDoubleDiagnosticsTests {
     _ source: String,
     _ expected: String
   ) {
-    let message = generatorDiagnosticMessage(for: source)
+    let result = generatorDiagnosticMessage(for: source)
 
     #expect(
-      message?.contains(expected) == true,
-      "Expected a diagnostic containing `\(expected)`, got `\(message ?? "no diagnostic")`."
+      result?.contains(expected) == true,
+      "Expected a diagnostic containing `\(expected)`, got `\(result ?? "no diagnostic")`."
     )
   }
 }
