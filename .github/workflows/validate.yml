@@ -1,0 +1,44 @@
+name: Validate Mercury
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Swift ${{ matrix.swift }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - swift: '6.3'
+            runner: macos-26
+            developer-dir: /Applications/Xcode_26.6.app/Contents/Developer
+          - swift: '6.4'
+            runner: xcode-27
+            developer-dir: /Applications/Xcode.app/Contents/Developer
+    env:
+      DEVELOPER_DIR: ${{ matrix.developer-dir }}
+      EXPECTED_SWIFT: ${{ matrix.swift }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify toolchain
+        run: |
+          swift --version
+          swift --version | grep -F "Swift version $EXPECTED_SWIFT"
+      - name: Test
+        run: swift test
+      - name: Compile generated consumers
+        run: python3 Scripts/verify-generated.py --products "$(swift build --show-bin-path)"
+      - name: Build Release
+        run: swift build -c release
+      - name: Check concurrent behavior with Thread Sanitizer
+        if: matrix.swift == '6.3'
+        run: swift test --sanitize thread --filter ConcurrentDoubleBehaviourTests

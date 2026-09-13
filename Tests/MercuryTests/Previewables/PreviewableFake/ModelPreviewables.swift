@@ -34,10 +34,10 @@ struct Preferences {
   let isCompact: Bool
 }
 
-/// Exercises a generic type, where the caller must supply the generic-typed value.
+/// Exercises a generic type, whose optional generic value defaults to nil.
 @PreviewableFake
 struct Page<Element> {
-  let element: Element
+  let element: Element?
   let index: Int
 }
 

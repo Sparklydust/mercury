@@ -18,14 +18,14 @@ enum PreviewableStoredPropertyCollector {
     var properties: [StoredProperty] = []
     for member in members {
       guard let variable = member.decl.as(VariableDeclSyntax.self),
-            !variable.modifiers.isStatic
-              else { continue }
+        !variable.modifiers.isStatic
+      else { continue }
 
       let isHidden = variable.modifiers.isFileScoped
       for binding in variable.bindings {
-        guard binding.accessorBlock == .none,
-              let identifier = binding.pattern.as(IdentifierPatternSyntax.self)
-                else { continue }
+        guard isStored(binding),
+          let identifier = binding.pattern.as(IdentifierPatternSyntax.self)
+        else { continue }
 
         let isMutable = variable.bindingSpecifier.tokenKind == .keyword(.var)
         let hasInitializer = binding.initializer != .none
@@ -33,11 +33,11 @@ enum PreviewableStoredPropertyCollector {
         if isHidden {
           guard hasInitializer, !isMutable else {
             throw GenerationError.message(
-                            """
-                            @PreviewableFake cannot construct this type: private property \
-                            '\(identifier.identifier.text)' appears in the memberwise initializer \
-                            — give it a default value or provide an accessible initializer
-                            """
+              """
+              @PreviewableFake cannot construct this type: private property \
+              '\(identifier.identifier.text)' appears in the memberwise initializer \
+              — give it a default value or provide an accessible initializer
+              """
             )
           }
           continue
@@ -46,10 +46,10 @@ enum PreviewableStoredPropertyCollector {
         guard isMutable || !hasInitializer else { continue }
         guard let type = inferredType(from: binding) else {
           throw GenerationError.message(
-                        """
-                        @PreviewableFake requires an explicit or inferable type for \
-                        '\(identifier.identifier.text)'
-                        """
+            """
+            @PreviewableFake requires an explicit or inferable type for \
+            '\(identifier.identifier.text)'
+            """
           )
         }
         properties.append(
@@ -68,14 +68,14 @@ enum PreviewableStoredPropertyCollector {
   static func firstPropertyWithoutInitialValue(in members: MemberBlockItemListSyntax) -> String? {
     for member in members {
       guard let variable = member.decl.as(VariableDeclSyntax.self),
-            !variable.modifiers.isStatic
-              else { continue }
+        !variable.modifiers.isStatic
+      else { continue }
       let isMutable = variable.bindingSpecifier.tokenKind == .keyword(.var)
       for binding in variable.bindings {
-        guard binding.accessorBlock == .none,
-              binding.initializer == .none,
-              let identifier = binding.pattern.as(IdentifierPatternSyntax.self)
-                else { continue }
+        guard isStored(binding),
+          binding.initializer == .none,
+          let identifier = binding.pattern.as(IdentifierPatternSyntax.self)
+        else { continue }
         // Only a mutable optional is implicitly `nil`.
         let isNilDefaulted = binding.typeAnnotation.map(\.type.isOptional) ?? false
         guard !(isMutable && isNilDefaulted) else { continue }
@@ -89,7 +89,8 @@ enum PreviewableStoredPropertyCollector {
     if let type = binding.typeAnnotation?.type { return type }
     guard let initializer = binding.initializer?.value else { return .none }
     if let call = initializer.as(FunctionCallExprSyntax.self),
-       let reference = call.calledExpression.as(DeclReferenceExprSyntax.self) {
+      let reference = call.calledExpression.as(DeclReferenceExprSyntax.self)
+    {
       return TypeSyntax(IdentifierTypeSyntax(name: .identifier(reference.baseName.text)))
     }
     let inferred: String?
@@ -101,5 +102,12 @@ enum PreviewableStoredPropertyCollector {
     default: inferred = .none
     }
     return inferred.map { TypeSyntax(IdentifierTypeSyntax(name: .identifier($0))) }
+  }
+
+  /// Observers belong to stored properties; getters and setters do not.
+  private static func isStored(_ binding: PatternBindingSyntax) -> Bool {
+    guard let block = binding.accessorBlock else { return true }
+    guard case .accessors(let accessors) = block.accessors else { return false }
+    return accessors.allSatisfy { ["willSet", "didSet"].contains($0.accessorSpecifier.text) }
   }
 }

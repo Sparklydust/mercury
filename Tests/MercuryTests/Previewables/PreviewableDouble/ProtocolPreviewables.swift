@@ -13,7 +13,7 @@ enum LoadingState {
 
 /// A base protocol whose requirements must be flattened into every derived double.
 @PreviewableDouble
-protocol IdentifiableServiceProtocol {
+protocol IdentifiableServiceProtocol: Sendable {
   var identifier: UUID { get }
   func reset()
 }
@@ -37,9 +37,9 @@ protocol CatalogueServiceProtocol: IdentifiableServiceProtocol, AnyObject, Senda
 /// Exercises closures, tuples, existentials and `Result` in requirement position.
 @PreviewableDouble
 protocol CompositionServiceProtocol {
-  var onChange: () -> Void { get }
-  var transform: (Int) -> String { get }
-  var loader: (String) async throws -> Data { get }
+  var onChange: @Sendable () -> Void { get }
+  var transform: @Sendable (Int) -> String { get }
+  var loader: @Sendable (String) async throws -> Data { get }
   var coordinate: (Int, Int) { get }
   var labelled: (latitude: Double, longitude: Double) { get }
   var delegate: any IdentifiableServiceProtocol { get }

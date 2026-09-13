@@ -101,9 +101,9 @@ final class DeclarationCollector: SyntaxVisitor {
   }
 }
 
-private extension DeclarationCollector {
+extension DeclarationCollector {
 
-  func visitNominal(
+  fileprivate func visitNominal(
     node: some SyntaxProtocol,
     name: String,
     attributes: AttributeListSyntax,
@@ -117,12 +117,18 @@ private extension DeclarationCollector {
     let access = AccessLevel(modifiers: modifiers)
     for key in keys { index.typeAccess[key] = access }
     if isGeneric { index.genericTypes.formUnion(keys) }
+    if attributes.contains(where: {
+      guard case .attribute(let attribute) = $0 else { return false }
+      return attribute.attributeName.trimmedDescription == "globalActor"
+    }) {
+      index.globalActors.formUnion(keys)
+    }
     guard let annotated = Self.annotation(in: attributes) else { return }
     if annotated.annotation == .fake { index.fakeAnnotatedTypes.formUnion(keys) }
     record(annotated, declaration: declaration, name: name, position: position, node: node)
   }
 
-  func register(
+  fileprivate func register(
     protocol node: ProtocolDeclSyntax,
     named name: String,
     at position: LexicalPosition
@@ -131,10 +137,11 @@ private extension DeclarationCollector {
       index.protocols[key] = node
     }
     guard Self.annotation(in: node.attributes)?.annotation == .double else { return }
-    index.annotatedProtocols[name] = Self.qualifiedName(for: name, at: position)
+    let qualifiedName = Self.qualifiedName(for: name, at: position)
+    index.annotatedProtocols[qualifiedName] = qualifiedName
   }
 
-  func record(
+  fileprivate func record(
     _ annotated: (annotation: PreviewableAnnotation, attribute: AttributeSyntax),
     declaration: DeclSyntax,
     name: String,
@@ -154,19 +161,19 @@ private extension DeclarationCollector {
     )
   }
 
-  static func keys(for name: String, at position: LexicalPosition) -> [String] {
+  fileprivate static func keys(for name: String, at position: LexicalPosition) -> [String] {
     let qualifiedName = qualifiedName(for: name, at: position)
-    return qualifiedName == name ? [name] : [name, qualifiedName]
+    return [qualifiedName]
   }
 
   /// Returns the declaration name prefixed by its enclosing types, as the generated file must spell it.
-  static func qualifiedName(for name: String, at position: LexicalPosition) -> String {
+  fileprivate static func qualifiedName(for name: String, at position: LexicalPosition) -> String {
     guard case .emittable(let qualifier) = position, !qualifier.isEmpty else { return name }
     return (qualifier + [name]).joined(separator: ".")
   }
 
   /// Returns the first case that carries no associated value, wherever it appears in the declaration.
-  static func firstParameterlessCase(in node: EnumDeclSyntax) -> String? {
+  fileprivate static func firstParameterlessCase(in node: EnumDeclSyntax) -> String? {
     for member in node.memberBlock.members {
       guard let caseDeclaration = member.decl.as(EnumCaseDeclSyntax.self) else { continue }
       for element in caseDeclaration.elements where element.parameterClause == nil {
@@ -180,22 +187,22 @@ private extension DeclarationCollector {
   ///
   /// The attribute travels with the annotation because arguments such as `parameters:` are the generator's only
   /// description of a type it cannot read, and interpreting them belongs with generation rather than collection.
-  static func annotation(
+  fileprivate static func annotation(
     in attributes: AttributeListSyntax
   ) -> (annotation: PreviewableAnnotation, attribute: AttributeSyntax)? {
     for element in attributes {
       guard case .attribute(let attribute) = element,
-            let annotation = PreviewableAnnotation(
-              rawValue: attribute.attributeName.trimmedDescription
-            )
-              else { continue }
+        let annotation = PreviewableAnnotation(
+          rawValue: attribute.attributeName.trimmedDescription.replacingOccurrences(of: "Mercury.", with: "")
+        )
+      else { continue }
       return (annotation, attribute)
     }
     return nil
   }
 
   /// Walks the parent chain to decide whether a declaration can be emitted, and under which enclosing types.
-  static func lexicalPosition(of node: some SyntaxProtocol) -> LexicalPosition {
+  fileprivate static func lexicalPosition(of node: some SyntaxProtocol) -> LexicalPosition {
     var qualifier: [String] = []
     var current = node.parent
 
@@ -207,9 +214,10 @@ private extension DeclarationCollector {
         return .unsupported(reason: "inside a #if block")
       }
       if parent.is(FunctionDeclSyntax.self)
-          || parent.is(InitializerDeclSyntax.self)
-          || parent.is(ClosureExprSyntax.self)
-          || parent.is(AccessorDeclSyntax.self) {
+        || parent.is(InitializerDeclSyntax.self)
+        || parent.is(ClosureExprSyntax.self)
+        || parent.is(AccessorDeclSyntax.self)
+      {
         return .unsupported(reason: "inside a function body")
       }
       if let structure = parent.as(StructDeclSyntax.self) {

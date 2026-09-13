@@ -13,18 +13,21 @@ enum PreviewableRequirementFlattener {
     index: ModuleIndex,
     visited: inout Set<String>
   ) throws -> [MemberBlockItemSyntax] {
-    guard visited.insert(declaration.name.text).inserted else { return [] }
-    var members = Array(declaration.memberBlock.members)
+    let qualified = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
+    guard visited.insert(qualified).inserted else { return [] }
+    let scope = qualified.split(separator: ".").map(String.init)
+    let rewriter = TypeNameResolver(index: index, scope: scope)
+    var members = declaration.memberBlock.members.map { rewriter.rewrite($0).cast(MemberBlockItemSyntax.self) }
 
     for inherited in declaration.inheritanceClause?.inheritedTypes ?? [] {
       let name = inherited.type.trimmedDescription
       if markerProtocols.contains(name) { continue }
-      guard let base = index.protocols[name] ?? index.protocols[name.simpleName] else {
+      guard let resolved = index.resolve(name, scope: scope), let base = index.protocols[resolved] else {
         throw GenerationError.message(
-                    """
-                    @PreviewableDouble cannot read the requirements of '\(name)' \
-                    — it is not declared in this module
-                    """
+          """
+          @PreviewableDouble cannot read the requirements of '\(name)' \
+          — it is not declared in this module
+          """
         )
       }
       members.append(
@@ -36,6 +39,6 @@ enum PreviewableRequirementFlattener {
 
   /// Protocols that add no requirement of their own, so a double need not read them.
   private static let markerProtocols: Set<String> = [
-    "AnyObject", "Sendable", "AnyActor", "Actor", "Any"
+    "AnyObject", "Sendable", "Any",
   ]
 }

@@ -11,6 +11,7 @@ enum PreviewableDoubleMemberBuilder {
     from declaration: VariableDeclSyntax,
     access: String,
     seen: inout Set<String>,
+    isolated: Bool,
     resolver: inout DefaultValueResolver
   ) throws -> [GeneratedProperty] {
     guard !declaration.modifiers.isStatic else {
@@ -22,9 +23,9 @@ enum PreviewableDoubleMemberBuilder {
     var properties: [GeneratedProperty] = []
     for binding in declaration.bindings {
       guard let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
-            let type = binding.typeAnnotation?.type,
-            let accessorBlock = binding.accessorBlock
-              else {
+        let type = binding.typeAnnotation?.type,
+        let accessorBlock = binding.accessorBlock
+      else {
         throw GenerationError.message(
           "@PreviewableDouble requires named, explicitly typed protocol properties"
         )
@@ -38,19 +39,22 @@ enum PreviewableDoubleMemberBuilder {
         )
       }
       let printedType = type.trimmedDescription
+      resolver.fieldName = name
       let defaultValue = try resolver.defaultValue(for: type)
-      let stub = "\(access)var \(name)Stub: \(printedType) = \(defaultValue)"
+      let stub = DoubleStorageBuilder.property(
+        name: name + "Stub", type: printedType, value: defaultValue, access: access, isolated: isolated
+      )
 
       if accessorBlock.isSettable {
         properties.append(
           GeneratedProperty(
             stub: stub,
             requirement: """
-            \(access)var \(name): \(printedType) {
-              get { \(name)Stub }
-              set { \(name)Stub = newValue }
-            }
-            """
+              \(access)var \(name): \(printedType) {
+                get { \(name)Stub }
+                set { \(name)Stub = newValue }
+              }
+              """
           )
         )
       } else {
@@ -68,20 +72,21 @@ enum PreviewableDoubleMemberBuilder {
   static func methodDeclaration(
     from function: FunctionDeclSyntax,
     access: String,
+    isolated: Bool,
     resolver: inout DefaultValueResolver
   ) throws -> GeneratedMethod {
-    guard !function.modifiers.isStatic,
-          function.genericParameterClause == .none,
-          function.genericWhereClause == .none
-            else {
+    guard !function.modifiers.isStatic else {
       throw GenerationError.message(
-        "@PreviewableDouble does not support static or generic method requirements"
+        "@PreviewableDouble does not support static method requirements"
       )
     }
 
     let methodName = function.name.text
-    let signatureTypes = function.signature.parameterClause.parameters.map(\.type)
-    + [function.signature.returnClause?.type].compactMap { $0 }
+    let isGeneric = function.genericParameterClause != nil
+    resolver.fieldName = methodName
+    let signatureTypes =
+      function.signature.parameterClause.parameters.map(\.type)
+      + [function.signature.returnClause?.type].compactMap { $0 }
     guard !signatureTypes.contains(where: \.usesSelfType) else {
       throw GenerationError.message(
         "@PreviewableDouble does not support 'Self' in requirement '\(methodName)'"
@@ -91,9 +96,11 @@ enum PreviewableDoubleMemberBuilder {
     var parameters: [String] = []
     for parameter in function.signature.parameterClause.parameters {
       guard parameter.ellipsis == .none
-              else { throw GenerationError.message("@PreviewableDouble does not support variadic parameters") }
+      else { throw GenerationError.message("@PreviewableDouble does not support variadic parameters") }
       let localName = parameter.secondName?.text ?? parameter.firstName.text
-      guard localName != "_" else { throw GenerationError.message("@PreviewableDouble requires a named local parameter") }
+      guard localName != "_" else {
+        throw GenerationError.message("@PreviewableDouble requires a named local parameter")
+      }
       // A non-escaping closure cannot be stored, so function-typed arguments are not recorded.
       guard !parameter.type.isFunctionType else { continue }
       parameters.append(localName)
@@ -106,39 +113,70 @@ enum PreviewableDoubleMemberBuilder {
     let isThrowing = throwsClause != nil && !isRethrowing
     if isThrowing {
       let thrownType = throwsClause?.type?.trimmedDescription ?? "any Error"
-      declarations.append("\(access)var \(methodName)ErrorStub: (\(thrownType))?")
+      let genericNames = Set(function.genericParameterClause?.parameters.map(\.name.text) ?? [])
+      if let type = throwsClause?.type, !genericNames.isDisjoint(with: type.writtenTypeNames) {
+        throw GenerationError.message("@PreviewableDouble does not support a generic thrown error type")
+      }
+      declarations.append(
+        DoubleStorageBuilder.property(
+          name: methodName + "ErrorStub", type: "(\(thrownType))?", value: ".none", access: access, isolated: isolated
+        ))
       // A retrying caller needs a different outcome per call, which one stored error cannot express.
-      declarations.append("\(access)var \(methodName)ErrorsStub: [\(thrownType)] = []")
+      declarations.append(
+        DoubleStorageBuilder.property(
+          name: methodName + "ErrorsStub", type: "[\(thrownType)]", value: "[]", access: access, isolated: isolated
+        ))
     }
 
     let returnType = function.signature.returnClause?.type
     let returnsValue = returnType.map { !DefaultValueResolver.isVoid($0) } ?? false
     if let returnType, returnsValue {
-      let defaultValue = try resolver.defaultValue(for: returnType)
-      declarations.append(
-        "\(access)var \(methodName)Stub: \(returnType.trimmedDescription) = \(defaultValue)"
-      )
+      if isGeneric {
+        declarations.append("\(access)let \(methodName)Stub = PreviewableResponses()")
+      } else {
+        declarations.append(
+          DoubleStorageBuilder.property(
+            name: methodName + "Stub", type: returnType.trimmedDescription,
+            value: try resolver.defaultValue(for: returnType), access: access, isolated: isolated
+          ))
+      }
     }
 
     var body = [
-      "calledMethods.append(#function)",
-      "passedParameters[#function, default: []].append([\(parameters.joined(separator: ", "))])"
+      "self.calledMethods.append(#function)",
+      "self.passedParameters[#function, default: []].append([\(parameters.joined(separator: ", "))])",
     ]
+    if !isolated {
+      body.insert(contentsOf: parameters.map { "Mercury.previewableRequireSendable(\($0))" }, at: 0)
+    }
     if isThrowing {
       // The queue is consumed first, so a test can fail the first calls and let a later one succeed.
-      body.append("if !\(methodName)ErrorsStub.isEmpty { throw \(methodName)ErrorsStub.removeFirst() }")
-      body.append("if let \(methodName)ErrorStub { throw \(methodName)ErrorStub }")
+      body.append("if !self.\(methodName)ErrorsStub.isEmpty { throw self.\(methodName)ErrorsStub.removeFirst() }")
+      body.append("if let \(methodName)ErrorStub = self.\(methodName)ErrorStub { throw \(methodName)ErrorStub }")
     }
     if returnsValue {
-      body.append("return \(methodName)Stub")
+      if isGeneric, let returnType {
+        body.append("return self.\(methodName)Stub.require((\(returnType.trimmedDescription)).self, method: #function)")
+      } else {
+        body.append("return self.\(methodName)Stub")
+      }
     }
-    let methodBody = body.map { "  \($0)" }.joined(separator: "\n")
+    let effects = isThrowing ? " " + (throwsClause?.trimmedDescription ?? "throws") : ""
+    let output = returnType?.trimmedDescription ?? "Void"
+    let closureSignature = "()\(effects) -> \(output) in"
+    let call =
+      "\(returnsValue ? "return " : "")\(isThrowing ? "try " : "")Mercury.previewableWithLock(self._previewableLock) { \(closureSignature)"
+    let methodBody = ([call] + body.map { "  " + $0 } + ["}"]).joined(separator: "\n").indented(by: 2)
     let signature = function.signature.generatedDescription
+    let generics = function.genericParameterClause?.trimmedDescription ?? ""
+    let constraints = function.genericWhereClause.map { " " + $0.trimmedDescription } ?? ""
+    let attributes = function.attributes.isEmpty ? "" : function.attributes.trimmedDescription + "\n"
     let requirement = """
-      \(access)func \(methodName)\(signature) {
+      \(attributes)\(access)func \(methodName)\(generics)\(signature)\(constraints) {
       \(methodBody)
       }
       """
+
     return GeneratedMethod(stubs: declarations, requirement: requirement)
   }
 
@@ -149,7 +187,8 @@ enum PreviewableDoubleMemberBuilder {
   /// call like every other requirement, so a factory protocol can be asserted on the same way.
   static func initializerDeclaration(
     from initializer: InitializerDeclSyntax,
-    access: String
+    access: String,
+    isolated: Bool
   ) throws -> String? {
     let parameters = Array(initializer.signature.parameterClause.parameters)
     let hasEffects = initializer.signature.effectSpecifiers != nil
@@ -167,11 +206,13 @@ enum PreviewableDoubleMemberBuilder {
       recorded.append(localName)
     }
 
+    let checks = isolated ? "" : recorded.map { "Mercury.previewableRequireSendable(\($0))" }.joined(separator: "\n")
     let optionalMark = initializer.optionalMark?.text ?? String()
     return """
       \(access)init\(optionalMark)\(initializer.signature.generatedDescription) {
-        calledMethods.append(#function)
-        passedParameters[#function, default: []].append([\(recorded.joined(separator: ", "))])
+      \(checks.indented(by: 2))
+        self._previewable_calledMethods.append(#function)
+        self._previewable_passedParameters[#function, default: []].append([\(recorded.joined(separator: ", "))])
       }
       """
   }

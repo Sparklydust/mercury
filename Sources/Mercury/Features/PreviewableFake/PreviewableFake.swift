@@ -7,22 +7,17 @@ import Foundation
 /// Marks a structure or class for fake-factory generation.
 ///
 /// The generated `fake(...)` factory returns an instance with generated defaults or caller-provided overrides in
-/// Debug builds, test targets, and SwiftUI previews. Its signature remains available in other builds for preview
+/// Debug builds, Debug test targets, and SwiftUI previews. Its signature remains available in other builds for preview
 /// type checking, but invoking it traps.
 /// Classes with generated properties require mutable properties and an accessible parameterless initializer.
 ///
-/// A globally isolated type keeps its isolation. The factory is generated into an extension of that type and calls
-/// an initializer that is isolated too, so it is callable from that actor and nowhere else — unlike a double, whose
-/// initializer the build tool declares itself and can therefore make `nonisolated`.
-///
-/// The macro carries a peer role rather than an extension role because it generates nothing itself: it validates the
-/// declaration, and the build tool plugin writes the factory. An extension role would also make the macro
-/// unattachable to the extensions ``PreviewableFake(parameters:)`` relies on.
+/// The factory preserves actor isolation and throws when initialization or a nested default can throw.
+/// Every generated parameter has an automatic default; unsupported construction produces a source diagnostic.
 @attached(peer)
 public macro PreviewableFake() = #externalMacro(
-  module: "PreviewableMacrosPlugin",
-  type: "PreviewableFakeMacro"
-)
+    module: "PreviewableMacrosPlugin",
+    type: "PreviewableFakeMacro"
+  )
 
 /// Marks an extension of a type declared outside this module for fake-factory generation.
 ///
@@ -38,10 +33,14 @@ public macro PreviewableFake() = #externalMacro(
 /// Apply the macro to an unconstrained extension of a non-generic type, and keep `parameters` in step with the
 /// initializer being called: the build tool cannot check a signature it cannot read, so a mismatch surfaces as a
 /// compiler error inside the generated file.
-///
-/// - Parameter parameters: The name and type of every value the generated factory passes to the type's initializer.
+/// - Parameters:
+///   - parameters: The labels and types accepted by the external initializer.
+///   - throwing: Whether the external initializer throws.
 @attached(peer)
-public macro PreviewableFake(parameters: [(String, Any.Type)]) = #externalMacro(
-  module: "PreviewableMacrosPlugin",
-  type: "PreviewableFakeMacro"
-)
+public macro PreviewableFake(
+  parameters: [(String, Any.Type)],
+  throwing: Bool = false
+) = #externalMacro(
+    module: "PreviewableMacrosPlugin",
+    type: "PreviewableFakeMacro"
+  )

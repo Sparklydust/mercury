@@ -2,7 +2,6 @@
 // Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
 //
 
-import LoremSwiftum
 import SwiftSyntax
 
 /// Synthesises a compilable default value for a requirement type.
@@ -17,6 +16,8 @@ struct DefaultValueResolver {
 
   /// Generic parameter names of the enclosing declaration, which can never be defaulted.
   var genericParameters: Set<String> = []
+  var fieldName = "default"
+  var usedThrowingDefault = false
 
   /// The distinct values already emitted.
   var values = FakeDefaultValues()
@@ -61,29 +62,36 @@ struct DefaultValueResolver {
       )
     }
     throw GenerationError.message(
-      "cannot synthesise a default for '\(type.trimmedDescription)' — make the requirement optional"
+      "cannot synthesise a default for '\(type.trimmedDescription)' — no automatic default is available"
     )
   }
 }
 
-private extension DefaultValueResolver {
+extension DefaultValueResolver {
 
-  func arguments(of clause: GenericArgumentClauseSyntax?) -> [TypeSyntax] {
+  fileprivate func arguments(of clause: GenericArgumentClauseSyntax?) -> [TypeSyntax] {
     clause?.arguments.compactMap { TypeSyntax($0.argument) } ?? []
   }
 
-  mutating func closureLiteral(for function: FunctionTypeSyntax) throws -> String {
+  fileprivate mutating func closureLiteral(for function: FunctionTypeSyntax) throws -> String {
     let count = function.parameters.count
     let placeholders = Array(repeating: "_", count: count).joined(separator: ", ")
     let returnType = function.returnClause.type
     guard !Self.isVoid(returnType) else {
       return count == 0 ? "{ }" : "{ \(placeholders) in }"
     }
+    let previous = usedThrowingDefault
+    usedThrowingDefault = false
     let value = try defaultValue(for: returnType)
+    let throwsOnCall = usedThrowingDefault
+    usedThrowingDefault = previous
+    if throwsOnCall && function.effectSpecifiers?.throwsClause == nil {
+      throw GenerationError.message("'\(fieldName)' requires a throwing closure to construct its return value")
+    }
     return count == 0 ? "{ \(value) }" : "{ \(placeholders) in \(value) }"
   }
 
-  mutating func tupleLiteral(for tuple: TupleTypeSyntax) throws -> String {
+  fileprivate mutating func tupleLiteral(for tuple: TupleTypeSyntax) throws -> String {
     guard !tuple.elements.isEmpty else { return "()" }
     // A single unlabelled element is a parenthesised type, not a one-element tuple.
     if tuple.elements.count == 1, let only = tuple.elements.first, only.firstName == nil {
@@ -101,55 +109,55 @@ private extension DefaultValueResolver {
     return "(\(elements.joined(separator: ", ")))"
   }
 
-  mutating func nominalDefault(
+  fileprivate mutating func nominalDefault(
     named name: String,
     simpleName: String,
     genericArguments: [TypeSyntax]
   ) throws -> String {
     if genericParameters.contains(name) {
       throw GenerationError.message(
-        "cannot synthesise a default for generic parameter '\(name)' — make the requirement optional"
+        "cannot synthesise a default for generic parameter '\(name)' — no automatic default is available"
       )
     }
-    if let known = try knownDefault(named: name, genericArguments: genericArguments) {
-      return known
-    }
-    if let enumDefault = index.enumDefaults[name] ?? index.enumDefaults[simpleName] {
+    if let enumDefault = index.enumDefaults[name] {
       return enumDefault
     }
-    if index.protocols[name] != nil || index.protocols[simpleName] != nil {
+    if index.protocols[name] != nil {
       return try protocolDefault(named: name, simpleName: simpleName)
     }
-    if index.declaresType(name) || index.declaresType(simpleName) {
+    if index.declaresType(name) || index.fakeAnnotatedTypes.contains(name) {
       return try ownedTypeDefault(named: name, simpleName: simpleName)
     }
+    let standardName = name.hasPrefix("Swift.") || name.hasPrefix("Foundation.") ? simpleName : name
+    if let known = try knownDefault(named: standardName, genericArguments: genericArguments) { return known }
     guard genericArguments.isEmpty else {
       throw GenerationError.message(
-        "cannot synthesise a default for generic type '\(name)' — make the requirement optional"
+        "cannot synthesise a default for generic type '\(name)' — no automatic default is available"
       )
     }
-    // Declared outside this module: trust the fake to exist, resolved through the propagated imports.
-    return "\(name).fake()"
+    throw GenerationError.message(
+      "cannot synthesise a default for '\(fieldName)' of type '\(name)' — declare an explicit @PreviewableFake construction"
+    )
   }
 
-  mutating func knownDefault(
+  fileprivate mutating func knownDefault(
     named name: String,
     genericArguments: [TypeSyntax]
   ) throws -> String? {
     switch name {
     case "Bool": return "false"
     case "String", "Substring":
-      return context == .fake ? nextLoremString() : ".init()"
+      return context == .fake ? values.string() : ".init()"
     case "Void": return "()"
     case "Optional": return ".none"
     case "Array", "Set", "ContiguousArray": return "[]"
     case "Dictionary": return "[:]"
     case "Date":
-      return context == .fake ? nextFakeDate() : ".now"
+      return context == .fake ? values.date() : ".now"
     case "UUID":
-      return context == .fake ? nextFakeUUID() : "UUID()"
+      return context == .fake ? values.uuid() : "UUID()"
     case "URL":
-      return context == .fake ? nextFakeURL() : "URL(string: \"https://example.com\")!"
+      return context == .fake ? values.url() : "URL(string: \"https://example.com\")!"
     case "Image": return "Image(systemName: \"photo\")"
     case "Data": return "Data()"
     case "Character": return "\"a\""
@@ -158,78 +166,46 @@ private extension DefaultValueResolver {
       return ".success(\(try defaultValue(for: success)))"
     default:
       guard Self.numericTypes.contains(name) else { return nil }
-      return context == .fake ? nextNonZeroNumber() : ".zero"
+      return context == .fake ? values.number(for: name) : ".zero"
     }
   }
 
-  func protocolDefault(named name: String, simpleName: String) throws -> String {
-    guard index.annotatedProtocols[simpleName] != nil else {
+  fileprivate func protocolDefault(named name: String, simpleName: String) throws -> String {
+    guard index.annotatedProtocols[name] != nil else {
       throw GenerationError.message(
         "'\(name)' must be annotated with @PreviewableDouble to be used as a requirement type"
       )
     }
-    return "\(PreviewableDoubleNaming.doubleName(for: simpleName)).preview"
+    return "\(PreviewableDoubleNaming.doubleName(for: simpleName))()"
   }
 
-  func ownedTypeDefault(named name: String, simpleName: String) throws -> String {
-    if index.genericTypes.contains(name) || index.genericTypes.contains(simpleName) {
+  fileprivate mutating func ownedTypeDefault(named name: String, simpleName: String) throws -> String {
+    if index.genericTypes.contains(name) {
       throw GenerationError.message(
-        "cannot synthesise a default for generic type '\(name)' — make the requirement optional"
+        "cannot synthesise a default for generic type '\(name)' — no automatic default is available"
       )
     }
     guard index.fakeAnnotatedTypes.contains(name)
-            || index.fakeAnnotatedTypes.contains(simpleName)
-            else {
+    else {
       throw GenerationError.message(
         "'\(name)' must be annotated with @PreviewableFake to be used as a requirement type"
       )
     }
+    if index.throwingFakes.contains(name) {
+      guard context == .fake else {
+        throw GenerationError.message("'\(fieldName)' needs throwing factory '\(name).fake()' in a nonthrowing double")
+      }
+      usedThrowingDefault = true
+      return "try \(name).fake()"
+    }
     return "\(name).fake()"
   }
 
-  static let numericTypes: Set<String> = [
+  fileprivate static let numericTypes: Set<String> = [
     "Double", "Float", "Float16", "Float32", "Float64", "Float80",
     "Int", "Int8", "Int16", "Int32", "Int64",
     "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
-    "CGFloat", "TimeInterval", "Decimal"
+    "CGFloat", "TimeInterval", "Decimal",
   ]
 
-  mutating func nextLoremString() -> String {
-    for _ in 0..<100 {
-      let wordCount = 2 + values.strings.count % 3
-      let string = Lorem.words(wordCount)
-      if values.strings.insert(string).inserted {
-        return String(reflecting: string)
-      }
-    }
-    let string = "\(Lorem.words(2)) \(values.strings.count + 1)"
-    values.strings.insert(string)
-    return String(reflecting: string)
-  }
-
-  mutating func nextNonZeroNumber() -> String {
-    let number = (values.numbers.max() ?? 0) + 1
-    values.numbers.insert(number)
-    return String(number)
-  }
-
-  mutating func nextFakeURL() -> String {
-    let number = (values.urls.max() ?? 0) + 1
-    values.urls.insert(number)
-    return "URL(string: \"https://fake.url.com/\(number)\")!"
-  }
-
-  mutating func nextFakeUUID() -> String {
-    let number = (values.uuids.max() ?? 0) + 1
-    values.uuids.insert(number)
-    let suffix = String(repeating: "0", count: max(0, 12 - String(number).count)) + String(number)
-    return "UUID(uuidString: \"00000000-0000-0000-0000-\(suffix)\")!"
-  }
-
-  mutating func nextFakeDate() -> String {
-    let dayOffset = values.dates.count
-    values.dates.insert(dayOffset)
-    let timestamp = 1_704_067_200 + dayOffset * 86_400
-    return "Date(timeIntervalSince1970: \(timestamp))"
-  }
 }

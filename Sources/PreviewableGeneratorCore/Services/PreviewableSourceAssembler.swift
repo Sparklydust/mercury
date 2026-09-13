@@ -7,18 +7,16 @@ import SwiftSyntax
 /// Assembles the generated file from the sections each feature contributed.
 enum PreviewableSourceAssembler {
 
+  /// Combines feature declarations with the imports needed by their generated code.
   /// - Parameters:
   ///   - sections: One entry per feature, in the order their declarations are emitted.
   ///   - trees: The module's parsed source, read for the imports the generated file needs.
-  ///   - index: The module's annotations, used to ignore imports of files that generate nothing.
   /// - Returns: A compilable Swift source file.
   static func assemble(
     sections: [GeneratedPreviewable],
-    trees: [SourceFileSyntax],
-    index: ModuleIndex
+    trees: [SourceFileSyntax]
   ) -> String {
-    let importSource = importedModules(in: trees, index: index)
-      .map { "import \($0)" }
+    let importSource = importedModules(in: trees)
       .joined(separator: "\n")
     let debugDeclarations = sections.flatMap(\.debug).joined(separator: "\n\n")
     let releaseDeclarations = sections.flatMap(\.release).joined(separator: "\n\n")
@@ -42,17 +40,33 @@ enum PreviewableSourceAssembler {
       """
   }
 
-  /// Returns the modules the generated declarations need, taken from the files that carry an annotation.
-  private static func importedModules(in trees: [SourceFileSyntax], index: ModuleIndex) -> [String] {
-    let annotatedFiles = Set(index.annotations.map(\.fileIndex))
-    var imports: Set<String> = []
-    for (offset, tree) in trees.enumerated() where annotatedFiles.contains(offset) {
-      for statement in tree.statements {
-        guard let declaration = statement.item.as(ImportDeclSyntax.self) else { continue }
-        imports.insert(declaration.path.trimmedDescription)
-      }
+  /// Includes imports from unannotated files because inherited requirements may use their types.
+  private static func importedModules(in trees: [SourceFileSyntax]) -> [String] {
+    var imports: Set<String> = ["import Foundation", "@_spi(Generated) import Mercury"]
+    for tree in trees {
+      imports.formUnion(importsOnly(tree.statements))
     }
-    imports.remove("Mercury")
+    imports.remove("import Mercury")
     return imports.sorted()
+  }
+
+  private static func importsOnly(_ statements: CodeBlockItemListSyntax) -> [String] {
+    statements.compactMap { statement in
+      if let declaration = statement.item.as(ImportDeclSyntax.self) { return declaration.trimmedDescription }
+      guard let conditional = statement.item.as(IfConfigDeclSyntax.self) else { return nil }
+      var containsImport = false
+      let clauses = conditional.clauses.map { clause in
+        let content: [String]
+        if case .statements(let statements)? = clause.elements {
+          content = importsOnly(statements)
+        } else {
+          content = []
+        }
+        containsImport = containsImport || !content.isEmpty
+        let condition = clause.condition.map { " " + $0.trimmedDescription } ?? ""
+        return clause.poundKeyword.text + condition + "\n" + content.joined(separator: "\n")
+      }
+      return containsImport ? clauses.joined(separator: "\n") + "\n#endif" : nil
+    }
   }
 }

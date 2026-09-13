@@ -14,7 +14,7 @@ public enum PreviewableSourceGenerator {
   /// annotations appear in the module.
   private static let features: [any PreviewableFeatureProtocol.Type] = [
     PreviewableDoubleGenerator.self,
-    PreviewableFakeGenerator.self
+    PreviewableFakeGenerator.self,
   ]
 
   /// Generates the doubles, fake factories, and preview accessors declared by the supplied source files.
@@ -24,9 +24,37 @@ public enum PreviewableSourceGenerator {
   public static func generate(from files: [PreviewableSourceFile]) throws -> String {
     let trees = files.map { Parser.parse(source: $0.text) }
     let sourceMap = PreviewableSourceMap(files: files, trees: trees)
-    let index = moduleIndex(of: trees)
+    var index = moduleIndex(of: trees)
 
     try PreviewableAnnotationValidator.validate(index, features: features, sourceMap: sourceMap)
+    for annotation in index.annotations where annotation.annotation == .fake {
+      do {
+        index.fakes[annotation.qualifiedName] = try FakeDeclarationResolver.resolve(annotation, index: index)
+      } catch let error as GenerationError {
+        throw sourceMap.diagnostic(error.message, for: annotation)
+      }
+    }
+    index.throwingFakes = Set(index.fakes.values.filter(\.initializerThrows).map(\.typeName))
+    // Resolve repeatedly until throwing effects have propagated through every dependency.
+    var changed = true
+    while changed {
+      changed = false
+      for recipe in index.annotations.compactMap({ index.fakes[$0.qualifiedName] }) {
+        var resolver = DefaultValueResolver(index: index, context: .fake)
+        resolver.genericParameters = recipe.genericParameters
+        do {
+          for property in recipe.properties {
+            resolver.fieldName = "\(recipe.typeName).\(property.name)"
+            resolver.usedThrowingDefault = false
+            _ = try resolver.defaultValue(for: property.type)
+            if resolver.usedThrowingDefault, index.throwingFakes.insert(recipe.typeName).inserted { changed = true }
+          }
+        } catch let error as GenerationError {
+          throw sourceMap.diagnostic(error.message, for: recipe.annotation)
+        }
+      }
+    }
+    try DefaultDependencyValidator.validate(index, sourceMap: sourceMap)
 
     // One resolver per feature, kept for the whole run: its accumulated state is what keeps generated
     // values distinct, so replacing or copying it mid-run would repeat them.
@@ -51,8 +79,8 @@ public enum PreviewableSourceGenerator {
             resolver: &fakeResolver
           )
         }
-        sections[annotation.annotation, default: GeneratedPreviewable()]
-        += sourceMap.attributed(generated, to: annotation)
+        sections[annotation.annotation, default: GeneratedPreviewable()] += sourceMap.attributed(
+          generated, to: annotation)
       } catch let error as GenerationError {
         throw sourceMap.diagnostic(error.message, for: annotation)
       }
@@ -60,8 +88,7 @@ public enum PreviewableSourceGenerator {
 
     return PreviewableSourceAssembler.assemble(
       sections: features.compactMap { sections[$0.annotation] },
-      trees: trees,
-      index: index
+      trees: trees
     )
   }
 

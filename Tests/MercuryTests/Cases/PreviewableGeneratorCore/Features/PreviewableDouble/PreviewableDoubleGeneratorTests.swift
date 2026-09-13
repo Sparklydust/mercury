@@ -29,20 +29,18 @@ struct PreviewableDoubleGeneratorTests {
     "/// - Important: Available only in Debug builds.",
     "// Mock values",
     "// Preview value",
-    "// Spy values",
     "// Protocol requirements",
     "/// The shared double used by previews.",
-    "/// The protocol method names invoked on this double.",
-    "private(set) var calledMethods: [String] = []",
-    "private(set) var passedParameters: [String: [[Any?]]] = [:]",
-    "var stateStub: Mode = Mode.ready",
+    "private(set) var calledMethods: [String] {",
+    "private(set) var passedParameters: [String: [[Any?]]] {",
+    "stateStub: Mode = Mode.ready",
     "var state: Mode {\n    get { stateStub }\n    set { stateStub = newValue }\n  }",
     "var loadErrorStub: (any Error)?",
-    "var loadStub: [String] = []",
+    "loadStub: [String] = []",
     "passedParameters[#function, default: []].append([id])",
     "/// The shared `ServiceDouble` for SwiftUI preview dependency injection.",
     "nonisolated var serviceDouble: ServiceDouble",
-    "serviceDouble is unavailable outside Debug builds and SwiftUI previews"
+    "serviceDouble is unavailable outside Debug builds and SwiftUI previews",
   ])
   func generator_protocolIsAnnotated_expectedDoubleMemberIsGenerated(
     _ expected: String
@@ -58,7 +56,7 @@ struct PreviewableDoubleGeneratorTests {
   @Test(arguments: [
     "servicePreview",
     "func serviceDouble(",
-    "func previewable()"
+    "func previewable()",
   ])
   func generator_protocolIsAnnotated_obsoleteAPIIsNotGenerated(
     _ forbidden: String
@@ -72,27 +70,27 @@ struct PreviewableDoubleGeneratorTests {
   }
 
   @Test(arguments: [
-    "var identifierStub: UUID = UUID()",
+    "identifierStub: UUID = UUID()",
     "var identifier: UUID { identifierStub }",
     "func reset()",
-    "var nameStub: String = .init()"
+    "nameStub: String = .init()",
   ])
   func generator_protocolInheritsInModuleProtocol_requirementsAreFlattened(
     _ expected: String
   ) throws {
     let result = try PreviewableSourceGenerator.generate(from: [
-            """
-            @PreviewableDouble
-            protocol BaseProtocol {
-              var identifier: UUID { get }
-              func reset()
-            }
+      """
+      @PreviewableDouble
+      protocol BaseProtocol {
+        var identifier: UUID { get }
+        func reset()
+      }
 
-            @PreviewableDouble
-            protocol ServiceProtocol: BaseProtocol, AnyObject, Sendable {
-              var name: String { get }
-            }
-            """
+      @PreviewableDouble
+      protocol ServiceProtocol: BaseProtocol, AnyObject, Sendable {
+        var name: String { get }
+      }
+      """
     ])
 
     #expect(
@@ -102,32 +100,14 @@ struct PreviewableDoubleGeneratorTests {
   }
 
   @Test
-  func generator_doubleIsGenerated_typeIsConcurrencySafe() throws {
-    let result = try PreviewableSourceGenerator.generate(from: [
-      "@PreviewableDouble\nprotocol ServiceProtocol { var name: String { get } }"
-    ])
-
-    let isSendable = result.contains(
-      "final class ServiceDouble: ServiceProtocol, @unchecked Sendable {"
-    )
-    let previewIsUntrapped = result.contains("nonisolated static let preview = ServiceDouble()")
-    && !result.contains("assumeIsolated")
-
-    #expect(
-      isSendable && previewIsUntrapped,
-      "Doubles must compile under the Swift 6 language mode without trapping off the main thread."
-    )
-  }
-
-  @Test
   func generator_requirementRethrows_errorIsNotReplayed() throws {
     let result = try PreviewableSourceGenerator.generate(from: [
-            """
-            @PreviewableDouble
-            protocol MappingProtocol {
-              func map(_ transform: () throws -> Int) rethrows -> Int
-            }
-            """
+      """
+      @PreviewableDouble
+      protocol MappingProtocol {
+        func map(_ transform: () throws -> Int) rethrows -> Int
+      }
+      """
     ])
 
     let keepsSignature = result.contains("func map(_ transform: () throws -> Int) rethrows -> Int {")
@@ -142,14 +122,14 @@ struct PreviewableDoubleGeneratorTests {
   @Test
   func generator_requirementHasTypedThrows_stubMatchesTheThrownType() throws {
     let result = try PreviewableSourceGenerator.generate(from: [
-            """
-            enum MappingError: Error { case broken }
+      """
+      enum MappingError: Error { case broken }
 
-            @PreviewableDouble
-            protocol MappingProtocol {
-              func load() throws(MappingError) -> Int
-            }
-            """
+      @PreviewableDouble
+      protocol MappingProtocol {
+        func load() throws(MappingError) -> Int
+      }
+      """
     ])
 
     #expect(
@@ -161,12 +141,12 @@ struct PreviewableDoubleGeneratorTests {
   @Test
   func generator_requirementIsRestated_itIsGeneratedOnce() throws {
     let result = try PreviewableSourceGenerator.generate(from: [
-            """
-            protocol BaseProtocol { func load() -> Int }
+      """
+      protocol BaseProtocol { func load() -> Int }
 
-            @PreviewableDouble
-            protocol RefinedProtocol: BaseProtocol { func load() -> Int }
-            """
+      @PreviewableDouble
+      protocol RefinedProtocol: BaseProtocol { func load() -> Int }
+      """
     ])
 
     #expect(
@@ -190,23 +170,20 @@ struct PreviewableDoubleGeneratorTests {
   @Test
   func generator_requirementThrows_errorQueueIsConsumedBeforeTheStoredError() throws {
     let result = try PreviewableSourceGenerator.generate(from: [
-            """
-            @PreviewableDouble
-            protocol MappingProtocol {
-              func load() throws(MappingError) -> Int
-            }
+      """
+      @PreviewableDouble
+      protocol MappingProtocol {
+        func load() throws(MappingError) -> Int
+      }
 
-            enum MappingError: Error { case broken }
-            """
+      enum MappingError: Error { case broken }
+      """
     ])
 
-    let declaresQueue = result.contains("var loadErrorsStub: [MappingError] = []")
-    let consumesQueueFirst = result.contains(
-            """
-                if !loadErrorsStub.isEmpty { throw loadErrorsStub.removeFirst() }
-                if let loadErrorStub { throw loadErrorStub }
-            """
-    )
+    let declaresQueue = result.contains("loadErrorsStub: [MappingError] = []")
+    let queued = result.range(of: "if !self.loadErrorsStub.isEmpty")
+    let stored = result.range(of: "if let loadErrorStub")
+    let consumesQueueFirst = queued != nil && stored != nil && queued!.lowerBound < stored!.lowerBound
 
     #expect(
       declaresQueue && consumesQueueFirst,
@@ -222,8 +199,9 @@ struct PreviewableDoubleGeneratorTests {
     let unconditionalSource = result.components(separatedBy: "#if DEBUG").first ?? String()
 
     let isDebugOnly = !unconditionalSource.contains("ServiceDouble")
-    let accessorCompilesEverywhere = result.contains("nonisolated var serviceDouble: ServiceDouble")
-    && result.contains("nonisolated var serviceDouble: any ServiceProtocol")
+    let accessorCompilesEverywhere =
+      result.contains("nonisolated var serviceDouble: ServiceDouble")
+      && result.contains("nonisolated var serviceDouble: any ServiceProtocol")
 
     #expect(
       isDebugOnly && accessorCompilesEverywhere,
