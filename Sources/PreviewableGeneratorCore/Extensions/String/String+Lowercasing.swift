@@ -6,8 +6,8 @@ import Foundation
 
 extension String {
 
-    var lowercasingFirstCharacter: String {
-        guard let first else { return self }
-        return first.lowercased() + dropFirst()
-    }
+  var lowercasingFirstCharacter: String {
+    guard let first else { return self }
+    return first.lowercased() + dropFirst()
+  }
 }

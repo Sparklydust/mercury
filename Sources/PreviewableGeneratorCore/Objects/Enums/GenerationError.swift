@@ -7,13 +7,13 @@ import Foundation
 /// A failure raised while generating, later attributed to a source location.
 enum GenerationError: Error, CustomStringConvertible {
 
-    case message(String)
+  case message(String)
 
-    var description: String {
-        switch self {
-        case .message(let message): message
-        }
+  var description: String {
+    switch self {
+    case .message(let message): message
     }
+  }
 
-    var message: String { description }
+  var message: String { description }
 }

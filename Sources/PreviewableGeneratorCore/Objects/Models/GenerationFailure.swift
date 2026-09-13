@@ -7,6 +7,6 @@ import Foundation
 /// A validation failure paired with the declaration the developer has to change.
 struct GenerationFailure {
 
-    let annotation: AnnotatedDeclaration
-    let message: String
+  let annotation: AnnotatedDeclaration
+  let message: String
 }

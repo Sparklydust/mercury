@@ -7,6 +7,6 @@ import Foundation
 /// A generated stub and the protocol requirement it witnesses.
 struct GeneratedProperty {
 
-    let stub: String
-    let requirement: String
+  let stub: String
+  let requirement: String
 }

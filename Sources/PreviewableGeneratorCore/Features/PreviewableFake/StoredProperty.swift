@@ -7,7 +7,7 @@ import SwiftSyntax
 /// A stored property a generated fake factory takes an argument for.
 struct StoredProperty {
 
-    let name: String
-    let type: TypeSyntax
-    let isMutable: Bool
+  let name: String
+  let type: TypeSyntax
+  let isMutable: Bool
 }

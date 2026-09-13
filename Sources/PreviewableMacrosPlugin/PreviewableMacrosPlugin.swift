@@ -9,9 +9,9 @@ import SwiftSyntaxMacros
 @main
 struct PreviewableMacrosPlugin: CompilerPlugin {
 
-    /// The macro implementations exposed by the plugin.
-    let providingMacros: [Macro.Type] = [
-        PreviewableDoubleMacro.self,
-        PreviewableFakeMacro.self
-    ]
+  /// The macro implementations exposed by the plugin.
+  let providingMacros: [Macro.Type] = [
+    PreviewableDoubleMacro.self,
+    PreviewableFakeMacro.self
+  ]
 }

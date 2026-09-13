@@ -13,6 +13,6 @@ import Foundation
 /// Apply the macro only to protocols without associated types or generic constraints.
 @attached(peer, names: suffixed(Double))
 public macro PreviewableDouble() = #externalMacro(
-    module: "PreviewableMacrosPlugin",
-    type: "PreviewableDoubleMacro"
+  module: "PreviewableMacrosPlugin",
+  type: "PreviewableDoubleMacro"
 )

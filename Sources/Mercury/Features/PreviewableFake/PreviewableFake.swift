@@ -20,8 +20,8 @@ import Foundation
 /// unattachable to the extensions ``PreviewableFake(parameters:)`` relies on.
 @attached(peer)
 public macro PreviewableFake() = #externalMacro(
-    module: "PreviewableMacrosPlugin",
-    type: "PreviewableFakeMacro"
+  module: "PreviewableMacrosPlugin",
+  type: "PreviewableFakeMacro"
 )
 
 /// Marks an extension of a type declared outside this module for fake-factory generation.
@@ -42,6 +42,6 @@ public macro PreviewableFake() = #externalMacro(
 /// - Parameter parameters: The name and type of every value the generated factory passes to the type's initializer.
 @attached(peer)
 public macro PreviewableFake(parameters: [(String, Any.Type)]) = #externalMacro(
-    module: "PreviewableMacrosPlugin",
-    type: "PreviewableFakeMacro"
+  module: "PreviewableMacrosPlugin",
+  type: "PreviewableFakeMacro"
 )

@@ -7,6 +7,6 @@ import Foundation
 /// The two declarations `@PreviewableDouble` contributes for one protocol.
 struct GeneratedDouble {
 
-    let declaration: String
-    let previewConfiguration: String
+  let declaration: String
+  let previewConfiguration: String
 }

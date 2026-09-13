@@ -7,23 +7,23 @@ import SwiftSyntax
 /// Assembles the generated file from the sections each feature contributed.
 enum PreviewableSourceAssembler {
 
-    /// - Parameters:
-    ///   - sections: One entry per feature, in the order their declarations are emitted.
-    ///   - trees: The module's parsed source, read for the imports the generated file needs.
-    ///   - index: The module's annotations, used to ignore imports of files that generate nothing.
-    /// - Returns: A compilable Swift source file.
-    static func assemble(
-        sections: [GeneratedPreviewable],
-        trees: [SourceFileSyntax],
-        index: ModuleIndex
-    ) -> String {
-        let importSource = importedModules(in: trees, index: index)
-            .map { "import \($0)" }
-            .joined(separator: "\n")
-        let debugDeclarations = sections.flatMap(\.debug).joined(separator: "\n\n")
-        let releaseDeclarations = sections.flatMap(\.release).joined(separator: "\n\n")
-        let unconditionalDeclarations = sections.flatMap(\.unconditional).joined(separator: "\n\n")
-        return """
+  /// - Parameters:
+  ///   - sections: One entry per feature, in the order their declarations are emitted.
+  ///   - trees: The module's parsed source, read for the imports the generated file needs.
+  ///   - index: The module's annotations, used to ignore imports of files that generate nothing.
+  /// - Returns: A compilable Swift source file.
+  static func assemble(
+    sections: [GeneratedPreviewable],
+    trees: [SourceFileSyntax],
+    index: ModuleIndex
+  ) -> String {
+    let importSource = importedModules(in: trees, index: index)
+      .map { "import \($0)" }
+      .joined(separator: "\n")
+    let debugDeclarations = sections.flatMap(\.debug).joined(separator: "\n\n")
+    let releaseDeclarations = sections.flatMap(\.release).joined(separator: "\n\n")
+    let unconditionalDeclarations = sections.flatMap(\.unconditional).joined(separator: "\n\n")
+    return """
       //
       // Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
       //
@@ -40,19 +40,19 @@ enum PreviewableSourceAssembler {
 
       \(unconditionalDeclarations)
       """
-    }
+  }
 
-    /// Returns the modules the generated declarations need, taken from the files that carry an annotation.
-    private static func importedModules(in trees: [SourceFileSyntax], index: ModuleIndex) -> [String] {
-        let annotatedFiles = Set(index.annotations.map(\.fileIndex))
-        var imports: Set<String> = []
-        for (offset, tree) in trees.enumerated() where annotatedFiles.contains(offset) {
-            for statement in tree.statements {
-                guard let declaration = statement.item.as(ImportDeclSyntax.self) else { continue }
-                imports.insert(declaration.path.trimmedDescription)
-            }
-        }
-        imports.remove("Mercury")
-        return imports.sorted()
+  /// Returns the modules the generated declarations need, taken from the files that carry an annotation.
+  private static func importedModules(in trees: [SourceFileSyntax], index: ModuleIndex) -> [String] {
+    let annotatedFiles = Set(index.annotations.map(\.fileIndex))
+    var imports: Set<String> = []
+    for (offset, tree) in trees.enumerated() where annotatedFiles.contains(offset) {
+      for statement in tree.statements {
+        guard let declaration = statement.item.as(ImportDeclSyntax.self) else { continue }
+        imports.insert(declaration.path.trimmedDescription)
+      }
     }
+    imports.remove("Mercury")
+    return imports.sorted()
+  }
 }

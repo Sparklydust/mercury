@@ -7,11 +7,11 @@ import Foundation
 /// A failure in how the generator was invoked, as opposed to one in the sources it read.
 enum GeneratorCommandError: Error, CustomStringConvertible {
 
-    case missingOutputPath
+  case missingOutputPath
 
-    var description: String {
-        switch self {
-        case .missingOutputPath: "error: PreviewableGenerator requires an output path"
-        }
+  var description: String {
+    switch self {
+    case .missingOutputPath: "error: PreviewableGenerator requires an output path"
     }
+  }
 }

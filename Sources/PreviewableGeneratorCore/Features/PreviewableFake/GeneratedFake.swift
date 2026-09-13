@@ -7,6 +7,6 @@ import Foundation
 /// The factory `@PreviewableFake` contributes for one type, in both build configurations.
 struct GeneratedFake {
 
-    let debug: String
-    let release: String
+  let debug: String
+  let release: String
 }

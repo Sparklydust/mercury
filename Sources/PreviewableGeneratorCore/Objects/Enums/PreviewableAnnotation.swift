@@ -7,6 +7,6 @@ import Foundation
 /// The Previewable macro attached to a declaration.
 enum PreviewableAnnotation: String {
 
-    case double = "PreviewableDouble"
-    case fake = "PreviewableFake"
+  case double = "PreviewableDouble"
+  case fake = "PreviewableFake"
 }

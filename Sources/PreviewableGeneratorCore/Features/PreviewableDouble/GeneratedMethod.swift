@@ -7,6 +7,6 @@ import Foundation
 /// The generated stubs and the protocol requirement they witness.
 struct GeneratedMethod {
 
-    let stubs: [String]
-    let requirement: String
+  let stubs: [String]
+  let requirement: String
 }

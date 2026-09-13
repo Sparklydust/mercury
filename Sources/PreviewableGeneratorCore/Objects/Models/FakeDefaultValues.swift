@@ -7,9 +7,9 @@ import Foundation
 /// Tracks the values already handed out so generated defaults stay distinct and easy to identify.
 struct FakeDefaultValues {
 
-    var strings: Set<String> = []
-    var numbers: Set<Int> = []
-    var urls: Set<Int> = []
-    var uuids: Set<Int> = []
-    var dates: Set<Int> = []
+  var strings: Set<String> = []
+  var numbers: Set<Int> = []
+  var urls: Set<Int> = []
+  var uuids: Set<Int> = []
+  var dates: Set<Int> = []
 }
