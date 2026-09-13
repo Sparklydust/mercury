@@ -1,5 +1,5 @@
 //
-// Copyright © 2026 Swissquote. See LICENSE file for terms. All rights reserved.
+// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
 //
 
 import SwiftCompilerPlugin
