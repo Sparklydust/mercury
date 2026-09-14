@@ -10,11 +10,20 @@ enum DoubleStorageBuilder {
   ///   - value: The initial value expression.
   ///   - access: Access modifiers, including any required trailing space.
   ///   - isolated: Whether setter assignments may omit the `Sendable` check.
-  static func property(name: String, type: String, value: String, access: String, isolated: Bool) -> String {
+  ///   - documentation: The summary attached to the exposed property, without a comment marker.
+  static func property(
+    name: String,
+    type: String,
+    value: String,
+    access: String,
+    isolated: Bool,
+    documentation: String? = nil
+  ) -> String {
     let check = isolated ? "" : "previewableRequireSendable(newValue)\n"
+    let comment = documentation.map { "/// \($0)\n" } ?? ""
     return """
       private var _previewable_\(name): \(type) = \(value)
-      \(access)var \(name): \(type) {
+      \(comment)\(access)var \(name): \(type) {
         get { _previewableLock.withLock { _previewable_\(name) } }
         set {
       \(check.indented(by: 4))    _previewableLock.withLock { _previewable_\(name) = newValue }
@@ -33,7 +42,11 @@ enum DoubleStorageBuilder {
   ///   - declaration: The protocol to inspect.
   ///   - index: Protocol and global-actor declarations available in the module.
   ///   - visited: Qualified protocol names already inspected during recursive lookup.
-  static func isIsolated(_ declaration: ProtocolDeclSyntax, index: ModuleIndex, visited: Set<String> = []) -> Bool {
+  static func isIsolated(
+    _ declaration: ProtocolDeclSyntax,
+    index: ModuleIndex,
+    visited: Set<String> = []
+  ) -> Bool {
     let name = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
     let scope = name.split(separator: ".").map(String.init)
     guard !visited.contains(name) else { return false }

@@ -21,7 +21,7 @@ jobs:
       - name: Build Debug
         run: |
           swift --version
-          swift build
+          swift build --build-tests
 
       - name: Verify Generated Consumers
         run: python3 Scripts/verify-generated.py --products "$(swift build --show-bin-path)"

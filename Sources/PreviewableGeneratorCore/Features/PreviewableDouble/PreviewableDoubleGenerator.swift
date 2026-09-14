@@ -161,14 +161,19 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     )
     sections.append("\(access)nonisolated init() {}")
     sections.append(
-      DoubleStorageBuilder.property(
-        name: "calledMethods", type: "[String]", value: "[]", access: access + "private(set) ", isolated: true
-      ))
-    sections.append(
-      DoubleStorageBuilder.property(
-        name: "passedParameters", type: "[String: [[Any?]]]", value: "[:]", access: access + "private(set) ",
-        isolated: true
-      ))
+      [
+        "// Spy values",
+        DoubleStorageBuilder.property(
+          name: "calledMethods", type: "[String]", value: "[]", access: access + "private(set) ", isolated: true,
+          documentation: "The protocol method names invoked on this double."
+        ),
+        DoubleStorageBuilder.property(
+          name: "passedParameters", type: "[String: [[Any?]]]", value: "[:]", access: access + "private(set) ",
+          isolated: true,
+          documentation: "The arguments captured for each invocation of a protocol method, in call order."
+        )
+      ].joined(separator: "\n")
+    )
     if !requirementDeclarations.isEmpty {
       sections.append(
         (["// Protocol requirements"] + requirementDeclarations)
