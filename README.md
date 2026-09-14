@@ -140,6 +140,7 @@ Consumers do not need to rebuild these binaries.
 
 Rebuild after changing generator, generator core, macro implementation or launcher sources, `Package.swift`,
 `Package.resolved`, or `Scripts/generator-artifact.py`. README and test-only edits do not require rebuilding.
+Source fingerprints include comments and file headers. Finish source edits and formatting before rebuilding.
 
 From the repository root, using an Apple Silicon Mac with Xcode 27 / Swift 6.4 and Python 3:
 
@@ -153,7 +154,7 @@ updates checksums and the macro revision, and verifies the result. Include the f
 - `Artifacts/PreviewableGenerator.artifactbundle/` (executables, metadata, and SwiftSyntax license).
 - `Sources/PreviewableMacrosLauncher/BundledMacroRevision.swift`.
 
-To verify the bundle without rebuilding:
+Verify the final files before committing:
 
 ```sh
 python3 Scripts/generator-artifact.py verify

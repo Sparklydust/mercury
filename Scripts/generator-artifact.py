@@ -39,7 +39,8 @@ def verify_architectures(executable):
 
 
 def revision_source(checksum):
-  return ('/// Identifies the bundled macro implementation and invalidates consumers when it changes.\n'
+  return ('//\n// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.\n//\n\n'
+    '/// Identifies the bundled macro implementation and invalidates consumers when it changes.\n'
     f'let bundledMacroRevision = "{checksum}"\n')
 
 
