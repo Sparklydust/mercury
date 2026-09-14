@@ -18,6 +18,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify Bundled Tools
+        run: python3 Scripts/generator-artifact.py verify
+
       - name: Build Debug
         run: |
           swift --version

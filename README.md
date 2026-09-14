@@ -2,7 +2,7 @@
 
 Mercury generates model fakes and protocol doubles for tests and previews.
 
-**Requirements:** Swift 6.3 or later, iOS 26 or macOS 26.
+**Requirements:** Swift 6.4 or later, iOS 27 or macOS 27.
 
 ## Setup
 
@@ -41,6 +41,8 @@ Use `<property>Stub` and `<method>Stub` for responses, `<method>ErrorStub` for a
 
 Nonisolated doubles require `Sendable` responses and arguments. Protocols and individual requirements retain their global-actor isolation.
 
+Requirements with an explicit actor attribute record arguments in that actor's dictionary: `@MainActor` uses `mainActorPassedParameters`, and `@Scope.Context` uses `scope_ContextPassedParameters`. Read these values on the corresponding actor. `calledMethods` records all calls.
+
 ### Generic methods
 
 ```swift
@@ -58,7 +60,7 @@ serverDouble.makeStub.set(nil, for: String?.self)
 serverDouble.makeStub.remove(for: Int.self)
 ```
 
-Generic responses are keyed by return type. Generic response parameters need a known `Sendable` constraint. An explicit optional `nil` counts as configured; calling an unconfigured type traps.
+Generic responses are keyed by return type and must be `Sendable`. Constrain generic and associated result types accordingly. An explicit optional `nil` counts as configured; calling an unconfigured type traps.
 
 ## Model fakes
 
@@ -73,7 +75,7 @@ let profile = Profile.fake()
 let namedProfile = Profile.fake(name: "Alex")
 ```
 
-Generated parameters have defaults and accept overrides. Defaults cover common scalar types, optionals, collections, simple enums, and annotated types. Computed properties and initialized constants are excluded.
+Generated parameters have repeatable defaults and accept overrides. Defaults cover common scalar types, optionals, collections, simple enums, and annotated types. Computed properties and initialized constants are excluded.
 
 ### Throwing construction
 
@@ -129,3 +131,7 @@ Override defaults when application validation requires specific values.
 ## Development
 
 Run `swift test` locally. CI also checks generated consumers, runs the full suite with Thread Sanitizer, and builds Release.
+
+Consumers use bundled macOS generator and macro executables. A small launcher starts the macro plugin; consumers do not compile SwiftSyntax for Mercury. Generation caches source contents and preserves unchanged output.
+
+After editing either tool, run `python3 Scripts/generator-artifact.py build` and include the updated artifact and macro revision. CI verifies source fingerprints and checksums. Set `MERCURY_BUILD_GENERATOR_FROM_SOURCE=1` to develop using source builds of both tools.

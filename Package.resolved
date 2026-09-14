@@ -1,15 +1,6 @@
 {
-  "originHash" : "788a1277e481457fd06394044435ac8ee61621a3efbc66a116c9617f8d1a54ab",
+  "originHash" : "6adbb44edda55faba753dc2422b8ba245be8f1670f1455843dac772353207d26",
   "pins" : [
-    {
-      "identity" : "loremswiftum",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/lukaskubanek/LoremSwiftum.git",
-      "state" : {
-        "revision" : "a293c2339552c8cfb715e7f76c511feec02782ad",
-        "version" : "2.2.3"
-      }
-    },
     {
       "identity" : "swift-syntax",
       "kind" : "remoteSourceControl",

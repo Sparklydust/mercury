@@ -4,13 +4,15 @@
 
 import SwiftSyntaxMacroExpansion
 import Testing
-#if canImport(PreviewableMacrosPlugin)
+#if canImport(PreviewableMacrosTestsSupport)
+@testable import PreviewableMacrosTestsSupport
+#elseif canImport(PreviewableMacrosPlugin)
 @testable import PreviewableMacrosPlugin
 #endif
 
 struct PreviewableDoubleMacroTests {
 
-  #if canImport(PreviewableMacrosPlugin)
+  #if canImport(PreviewableMacrosTestsSupport) || canImport(PreviewableMacrosPlugin)
     // Macro implementations are compiler plugins built only for the host toolchain, so the
     // expansion tests below compile on macOS and are excluded on every other destination.
     private let macroSpecs: [String: MacroSpec] = [

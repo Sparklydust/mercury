@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Compile and execute generated consumers in disposable directories."""
 import argparse
+import json
+import os
+import platform
 from pathlib import Path
 import subprocess
 import tempfile
@@ -8,9 +11,11 @@ import tempfile
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--products', type=Path, required=True)
 parser.add_argument('--swiftc', default='swiftc')
+parser.add_argument('--generator', type=Path, default=Path(__file__).resolve().parents[1] /
+  'Artifacts/PreviewableGenerator.artifactbundle/bin/PreviewableGenerator')
 args = parser.parse_args()
 products = args.products.resolve()
-generator = products / 'PreviewableGenerator'
+generator = args.generator.resolve()
 plugin = products / 'PreviewableMacrosPlugin'
 if not plugin.exists():
   plugin = products / 'PreviewableMacrosPlugin-tool'
@@ -31,9 +36,67 @@ def require_success(result, name):
 
 with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
   root = Path(directory)
-  base = [args.swiftc, '-swift-version', '6', '-I', str(modules),
+  # Match Package.swift rather than swiftc's deployment target for the build host.
+  compiler = [args.swiftc, '-swift-version', '6', '-target', f'{platform.machine()}-apple-macosx27.0']
+  base = compiler + ['-I', str(modules),
     '-module-cache-path', str(root / 'cache'),
     '-load-plugin-executable', f'{plugin}#PreviewableMacrosPlugin']
+
+  for annotation, declaration, diagnostic in [
+    ('PreviewableDouble', 'struct Model {}', 'can only be applied to a protocol'),
+    ('PreviewableFake', 'enum Model {}', 'can only be applied to a structure, a class')
+  ]:
+    source = root / (annotation + '.swift')
+    source.write_text('import Mercury\n@' + annotation + '\n' + declaration)
+    result = run(base + ['-typecheck', str(source)])
+    assert result.returncode != 0 and diagnostic in result.stderr, result.stderr
+    print('PASS bundled-macro-diagnostic-' + annotation, flush=True)
+
+  incremental = root / 'incremental'
+  incremental.mkdir()
+  original = incremental / 'Model.swift'
+  unrelated = incremental / 'Other.swift'
+  generated = incremental / 'Generated.swift'
+  original.write_text('import Mercury\n@PreviewableFake struct Model { let name: String }')
+  unrelated.write_text('func unrelated() -> Int { 0 }')
+  command = [str(generator), str(generated), str(original), str(unrelated)]
+  require_success(run(command), 'initial generation')
+  expected = generated.read_bytes()
+  modified = generated.stat().st_mtime_ns
+  require_success(run(command), 'unchanged generation')
+  assert generated.stat().st_mtime_ns == modified, 'unchanged output was rewritten'
+  print('PASS unchanged-output-preserves-timestamp', flush=True)
+  require_success(run(command[:2] + list(reversed(command[2:]))), 'reordered inputs')
+  assert generated.stat().st_mtime_ns == modified, 'input ordering invalidated output'
+  print('PASS reordered-inputs-preserve-output', flush=True)
+  unrelated.write_text('func unrelated() -> Int { 1 }')
+  require_success(run(command), 'unrelated edit')
+  assert generated.stat().st_mtime_ns == modified, 'unrelated edit invalidated output'
+  print('PASS unrelated-edit-preserves-output', flush=True)
+  generated.write_text('corrupted output')
+  require_success(run(command), 'output repair')
+  assert generated.read_bytes() == expected, 'modified generated output was not repaired'
+  print('PASS corrupted-output-is-repaired', flush=True)
+  original_stat = original.stat()
+  original.write_text('import Mercury\n@PreviewableFake struct Model { let role: String }')
+  os.utime(original, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+  require_success(run(command), 'changed annotation')
+  assert b'role: String' in generated.read_bytes(), 'changed inputs reused stale output'
+  print('PASS changed-inputs-invalidate-cache', flush=True)
+
+  long_path = incremental
+  for index in range(4):
+    long_path /= str(index) + 'x' * 199
+  long_path.mkdir(parents=True)
+  empty = long_path / 'Empty.swift'
+  empty.write_text('// No declarations.\n')
+  inputs = [str(empty)] * (os.sysconf('SC_ARG_MAX') // len(str(empty)) + 1) + [str(original)]
+  input_list = incremental / 'Inputs.json'
+  input_list.write_text(json.dumps(inputs))
+  assert input_list.stat().st_size > os.sysconf('SC_ARG_MAX')
+  require_success(run([str(generator), str(generated), '--input-file-list', str(input_list)]), 'large input list')
+  assert b'role: String' in generated.read_bytes(), 'large input list lost annotated sources'
+  print('PASS input-list-exceeds-command-line-limit', flush=True)
 
   def verify(name, source, main='', release=False, compile_error=None, crashes=False, flags=(), generation_error=None):
     folder = root / name
@@ -44,7 +107,9 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
       original.write_text('import Mercury\n' + text)
       originals.append(str(original))
     generated = folder / 'Generated.swift'
-    generation = run([str(generator), str(generated)] + originals)
+    input_list = folder / 'Inputs.json'
+    input_list.write_text(json.dumps(originals))
+    generation = run([str(generator), str(generated), '--input-file-list', str(input_list)])
     if generation_error:
       assert generation.returncode != 0 and generation_error in generation.stderr, name + ': ' + generation.stderr
       print('PASS', name, flush=True)
@@ -104,7 +169,7 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     actor_source = (
       '@globalActor actor Context { static let shared = Context() }\n'
       'enum Scope { @globalActor actor Context { static let shared = Context() } }\n'
-      'final class Payload {}\n@PreviewableDouble protocol ServiceProtocol {\n'
+      'final class Payload { var value = 0 }\n@PreviewableDouble protocol ServiceProtocol {\n'
       '  @' + actor + ' var payload: Payload? { get set }\n'
       '  @' + actor + ' func store(_ value: Payload) -> Payload?\n'
       '  @' + actor + ' init(value: Payload)\n'
@@ -113,6 +178,42 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     verify('requirement-stub-isolation-' + actor, actor_source,
       'nonisolated func configure(_ double: ServiceDouble) { double.payloadStub = Payload() }',
       compile_error='isolated property')
+    recording = actor[0].lower() + actor[1:].replace('.', '_') + 'PassedParameters'
+    verify('requirement-recording-isolation-' + actor, actor_source,
+      'nonisolated func read(_ double: ServiceDouble) { _ = double.' + recording + ' }',
+      compile_error='isolated property')
+    verify('recorded-argument-cannot-be-transferred-' + actor, actor_source,
+      '@' + actor + ' func transfer(_ double: ServiceDouble) { '
+      'let value = double.' + recording + '["store(_:)"]![0][0] as! Payload; '
+      'Task.detached { value.value += 1 } }', compile_error='race')
+    verify('requirement-recording-access-' + actor, actor_source,
+      '@' + actor + ' func check() { let double = ServiceDouble(); let value = Payload(); '
+      'double.store(value); precondition((double.' + recording + '["store(_:)"]![0][0] as! Payload) === value); '
+      'precondition(double.passedParameters.isEmpty) }')
+  verify('nonisolated-requirements-on-actor-protocol',
+    '@MainActor @PreviewableDouble protocol ServiceProtocol { '
+    'nonisolated var count: Int { get set }; nonisolated func name() -> String }',
+    'nonisolated func check() { let double = ServiceDouble(); double.count = 42; '
+    'double.nameStub = "ready"; precondition(double.name() == "ready"); precondition(double.count == 42) }\ncheck()')
+  verify('mixed-actors',
+    '@globalActor actor Context { static let shared = Context() }\nfinal class Payload {}\n'
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { '
+    '@MainActor func store(_ value: Payload); @Context func cache(_ value: Payload); func load(id: Int) }')
+  verify('actor-recording-name-collision',
+    '@PreviewableDouble protocol ServiceProtocol { @MainActor func store(); var mainActorPassedParameters: Int { get } }',
+    generation_error='conflicts with a generated member')
+  verify('generic-associated-response-needs-constraint',
+    '@PreviewableDouble protocol ServiceProtocol { func first<T: Collection & Sendable>(_ values: T) -> T.Element }',
+    generation_error="generic response 'T.Element'")
+  verify('generic-associated-response-is-constrained',
+    '@PreviewableDouble protocol ServiceProtocol { '
+    'func first<T: Collection & Sendable>(_ values: T) -> T.Element where T.Element: Sendable }')
+  verify('generic-closure-response-needs-sendable',
+    '@PreviewableDouble protocol ServiceProtocol { func make<T: Sendable>(_ value: T) -> () -> T }',
+    generation_error='requires @Sendable')
+  for attribute in ['Sendable', 'MainActor']:
+    verify('generic-closure-response-' + attribute,
+      '@PreviewableDouble protocol ServiceProtocol { func make<T: Sendable>(_ value: T) -> @' + attribute + ' () -> T }')
   verify('inherited-requirement-actor',
     'final class Payload {}\nenum Scope {\n'
     '  @globalActor actor Context { static let shared = Context() }\n'
@@ -196,7 +297,7 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
 
   domain = root / 'Domain.swift'
   domain.write_text('public struct Token: Sendable { public let value: Int; public init(value: Int) throws { self.value = value } }')
-  require_success(run([args.swiftc, '-swift-version', '6', '-emit-module', '-emit-library', '-module-name', 'Domain',
+  require_success(run(compiler + ['-emit-module', '-emit-library', '-module-name', 'Domain',
     str(domain), '-o', str(root / 'libDomain.dylib'), '-emit-module-path', str(root / 'Domain.swiftmodule'),
     '-module-cache-path', str(root / 'cache')]), 'external module')
   base += ['-I', str(root), '-L', str(root), '-lDomain', '-Xlinker', '-rpath', '-Xlinker', str(root)]

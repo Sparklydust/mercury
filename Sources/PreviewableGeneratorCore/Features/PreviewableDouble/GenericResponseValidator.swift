@@ -1,3 +1,7 @@
+//
+// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+//
+
 import SwiftSyntax
 
 /// Validates the constraints required by generic response storage.
@@ -25,11 +29,71 @@ enum GenericResponseValidator {
         sendable.insert(constraint.leftType.trimmedDescription)
       }
     }
-    if let name = Set(returnType.writtenTypeNames).intersection(names).subtracting(sendable).sorted().first {
+    try validate(returnType, parameters: names, sendable: sendable, method: function.name.text, index: index)
+  }
+
+  /// Checks generic components of a response, including associated types and closure sendability.
+  /// - Parameters:
+  ///   - type: The response type or one of its components.
+  ///   - parameters: The method's generic parameter names.
+  ///   - sendable: Generic and associated types with known `Sendable` constraints.
+  ///   - method: The method name included in diagnostics.
+  ///   - index: Local declarations used to recognize globally isolated closure types.
+  /// - Throws: `GenerationError` when a component needs an additional constraint or attribute.
+  private static func validate(
+    _ type: TypeSyntax,
+    parameters: Set<String>,
+    sendable: Set<String>,
+    method: String,
+    index: ModuleIndex
+  ) throws {
+    if let attributed = type.as(AttributedTypeSyntax.self), attributed.baseType.is(FunctionTypeSyntax.self),
+      (attributed.attributes.contains(where: {
+        guard case .attribute(let attribute) = $0 else { return false }
+        return ["Sendable", "Swift.Sendable"].contains(attribute.attributeName.trimmedDescription)
+      }) || !DoubleStorageBuilder.isolationAttributes(in: attributed.attributes, index: index).isEmpty)
+    {
+      return
+    }
+    if type.is(FunctionTypeSyntax.self) {
+      throw GenerationError.message("@PreviewableDouble closure response in '\(method)' requires @Sendable")
+    }
+    let name = type.trimmedDescription
+    if parameters.contains(name)
+      || (type.is(MemberTypeSyntax.self) && parameters.contains(name.components(separatedBy: ".")[0]))
+    {
+      guard !sendable.contains(name) else { return }
       throw GenerationError.message(
-        "@PreviewableDouble generic response '\(name)' in '\(function.name.text)' "
+        "@PreviewableDouble generic response '\(name)' in '\(method)' "
           + "requires a Sendable constraint — add '\(name): Sendable'"
       )
+    }
+    for child in Syntax(type).children(viewMode: .sourceAccurate) {
+      try validateComponents(in: child, parameters: parameters, sendable: sendable, method: method, index: index)
+    }
+  }
+
+  /// Traverses wrapper syntax until a nested response type can be validated.
+  /// - Parameters:
+  ///   - syntax: A type's child syntax, such as a tuple element or generic argument list.
+  ///   - parameters: The method's generic parameter names.
+  ///   - sendable: Generic and associated types with known `Sendable` constraints.
+  ///   - method: The method name included in diagnostics.
+  ///   - index: Local declarations used to recognize globally isolated closure types.
+  /// - Throws: `GenerationError` for an unsupported nested response component.
+  private static func validateComponents(
+    in syntax: Syntax,
+    parameters: Set<String>,
+    sendable: Set<String>,
+    method: String,
+    index: ModuleIndex
+  ) throws {
+    if let type = syntax.as(TypeSyntax.self) {
+      try validate(type, parameters: parameters, sendable: sendable, method: method, index: index)
+    } else {
+      for child in syntax.children(viewMode: .sourceAccurate) {
+        try validateComponents(in: child, parameters: parameters, sendable: sendable, method: method, index: index)
+      }
     }
   }
 

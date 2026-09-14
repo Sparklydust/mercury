@@ -13,7 +13,7 @@ struct PreviewableBuildToolPlugin: BuildToolPlugin {
   /// - Parameters:
   ///   - context: The package plugin context used to locate the generator and output directory.
   ///   - target: The target whose Swift source files become generator inputs.
-  /// - Throws: When the generator tool cannot be located.
+  /// - Throws: When the generator cannot be located or the source-file list cannot be written.
   func createBuildCommands(
     context: PluginContext,
     target: Target
@@ -29,21 +29,26 @@ struct PreviewableBuildToolPlugin: BuildToolPlugin {
   /// Declares generation of one derived file with source inputs tracked by the build system.
   /// - Parameters:
   ///   - tool: The generator executable URL.
-  ///   - sourceFiles: The Swift inputs passed after the output path.
+  ///   - sourceFiles: The Swift inputs recorded in the source-file list.
   ///   - workDirectory: The plugin directory containing the derived output.
-  /// - Throws: No errors in the current implementation.
+  /// - Throws: When the source-file list cannot be written.
   private func commands(
     tool: URL,
     sourceFiles: [URL],
     workDirectory: URL
   ) throws -> [Command] {
     let output = workDirectory.appending(path: "Previewables.generated.swift")
+    let sources = sourceFiles.sorted { $0.path < $1.path }
+    let inputList = workDirectory.appending(path: "PreviewableSources.json")
+    let data = try JSONEncoder().encode(sources.map(\.path))
+    if (try? Data(contentsOf: inputList)) != data { try data.write(to: inputList, options: .atomic) }
     return [
       .buildCommand(
         displayName: "Generate Debug previewables",
         executable: tool,
-        arguments: [output.path] + sourceFiles.map(\.path),
-        inputFiles: sourceFiles,
+        arguments: [output.path, "--input-file-list", inputList.path],
+        environment: ["LLVM_PROFILE_FILE": "/dev/null"],
+        inputFiles: sources + [inputList],
         outputFiles: [output]
       )
     ]
@@ -59,7 +64,7 @@ extension PreviewableBuildToolPlugin: XcodeBuildToolPlugin {
   /// - Parameters:
   ///   - context: The Xcode plugin context used to locate the generator and output directory.
   ///   - target: The target whose Swift source inputs are processed.
-  /// - Throws: When the generator tool cannot be located.
+  /// - Throws: When the generator cannot be located or the source-file list cannot be written.
   func createBuildCommands(
     context: XcodePluginContext,
     target: XcodeTarget

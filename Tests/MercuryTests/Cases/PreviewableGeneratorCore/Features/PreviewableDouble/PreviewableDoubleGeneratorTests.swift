@@ -29,7 +29,7 @@ struct PreviewableDoubleGeneratorTests {
     "// Preview value",
     "// Protocol requirements",
     "/// The shared double used by previews.",
-    "private(set) var calledMethods: [String] {",
+    "private(set) nonisolated var calledMethods: [String] {",
     "private(set) var passedParameters: [String: [[Any?]]] {",
     "stateStub: Mode = Mode.ready",
     "var state: Mode {\n    get { stateStub }\n    set { stateStub = newValue }\n  }",

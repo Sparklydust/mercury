@@ -1,3 +1,8 @@
+//
+// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+//
+
+import Foundation
 import SwiftSyntax
 
 /// Renders synchronized storage without changing the names used to configure a double.
@@ -12,6 +17,8 @@ enum DoubleStorageBuilder {
   ///   - isolated: Whether setter assignments may omit the `Sendable` check.
   ///   - documentation: The summary attached to the exposed property, without a comment marker.
   ///   - isolation: Global-actor attributes applied to both storage and its accessors.
+  ///   - nonisolated: Whether the accessors must be callable outside the double's actor.
+  ///   - sharedBacking: Whether locked backing storage accepts writes from multiple actors.
   static func property(
     name: String,
     type: String,
@@ -19,13 +26,17 @@ enum DoubleStorageBuilder {
     access: String,
     isolated: Bool,
     documentation: String? = nil,
-    isolation: String = ""
+    isolation: String = "",
+    nonisolated: Bool = false,
+    sharedBacking: Bool = false
   ) -> String {
     let check = isolated ? "" : "previewableRequireSendable(newValue)\n"
     let comment = documentation.map { "/// \($0)\n" } ?? ""
+    let backing = nonisolated || sharedBacking ? "nonisolated(unsafe) " : ""
+    let modifier = nonisolated ? "nonisolated " : ""
     return """
-      \(isolation)private var _previewable_\(name): \(type) = \(value)
-      \(comment)\(isolation)\(access)var \(name): \(type) {
+      \(isolation)\(backing)private var _previewable_\(name): \(type) = \(value)
+      \(comment)\(isolation)\(access)\(modifier)var \(name): \(type) {
         get { _previewableLock.withLock { _previewable_\(name) } }
         set {
       \(check.indented(by: 4))    _previewableLock.withLock { _previewable_\(name) = newValue }
@@ -37,6 +48,15 @@ enum DoubleStorageBuilder {
         }
       }
       """
+  }
+
+  /// Returns the recording dictionary that keeps an explicitly isolated requirement's arguments on its actor.
+  /// - Parameter isolation: The requirement's qualified actor attribute, or an empty string.
+  static func recordingName(for isolation: String) -> String {
+    guard !isolation.isEmpty else { return "passedParameters" }
+    let actor = isolation.trimmingCharacters(in: .whitespacesAndNewlines)
+      .dropFirst().replacingOccurrences(of: ".", with: "_")
+    return actor.lowercasingFirstCharacter + "PassedParameters"
   }
 
   /// Returns global-actor attributes with trailing newlines, or an empty string for nonisolated declarations.

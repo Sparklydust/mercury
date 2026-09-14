@@ -29,7 +29,9 @@ enum PreviewableDoubleMemberBuilder {
     }
 
     let isolation = DoubleStorageBuilder.isolationAttributes(in: declaration.attributes, index: resolver.index)
-    let memberIsolated = isolated || !isolation.isEmpty
+    let nonisolated = declaration.modifiers.contains { $0.name.text == "nonisolated" }
+    let modifier = nonisolated ? "nonisolated " : ""
+    let memberIsolated = !nonisolated && (isolated || !isolation.isEmpty)
     let attributes = declaration.attributes.isEmpty ? "" : declaration.attributes.trimmedDescription + "\n"
     var properties: [GeneratedProperty] = []
     for binding in declaration.bindings {
@@ -54,7 +56,7 @@ enum PreviewableDoubleMemberBuilder {
       let defaultValue = try resolver.defaultValue(for: type)
       let stub = DoubleStorageBuilder.property(
         name: name + "Stub", type: printedType, value: defaultValue, access: access,
-        isolated: memberIsolated, isolation: isolation
+        isolated: memberIsolated, isolation: isolation, nonisolated: nonisolated
       )
 
       if accessorBlock.isSettable {
@@ -62,7 +64,7 @@ enum PreviewableDoubleMemberBuilder {
           GeneratedProperty(
             stub: stub,
             requirement: """
-              \(attributes)\(access)var \(name): \(printedType) {
+              \(attributes)\(access)\(modifier)var \(name): \(printedType) {
                 get { \(name)Stub }
                 set { \(name)Stub = newValue }
               }
@@ -73,7 +75,7 @@ enum PreviewableDoubleMemberBuilder {
         properties.append(
           GeneratedProperty(
             stub: stub,
-            requirement: "\(attributes)\(access)var \(name): \(printedType) { \(name)Stub }"
+            requirement: "\(attributes)\(access)\(modifier)var \(name): \(printedType) { \(name)Stub }"
           )
         )
       }
@@ -105,7 +107,9 @@ enum PreviewableDoubleMemberBuilder {
 
     let methodName = function.name.text
     let isolation = DoubleStorageBuilder.isolationAttributes(in: function.attributes, index: resolver.index)
-    let memberIsolated = isolated || !isolation.isEmpty
+    let nonisolated = function.modifiers.contains { $0.name.text == "nonisolated" }
+    let modifier = nonisolated ? "nonisolated " : ""
+    let memberIsolated = !nonisolated && (isolated || !isolation.isEmpty)
     let isGeneric = function.genericParameterClause != nil
     resolver.fieldName = methodName
     let signatureTypes =
@@ -144,13 +148,13 @@ enum PreviewableDoubleMemberBuilder {
       declarations.append(
         DoubleStorageBuilder.property(
           name: methodName + "ErrorStub", type: "(\(thrownType))?", value: ".none", access: access,
-          isolated: memberIsolated, isolation: isolation
+          isolated: memberIsolated, isolation: isolation, nonisolated: nonisolated
         ))
       // A retrying caller needs a different outcome per call, which one stored error cannot express.
       declarations.append(
         DoubleStorageBuilder.property(
           name: methodName + "ErrorsStub", type: "[\(thrownType)]", value: "[]", access: access,
-          isolated: memberIsolated, isolation: isolation
+          isolated: memberIsolated, isolation: isolation, nonisolated: nonisolated
         ))
     }
 
@@ -159,20 +163,21 @@ enum PreviewableDoubleMemberBuilder {
     if let returnType, returnsValue {
       if isGeneric {
         try GenericResponseValidator.validate(function, index: resolver.index)
-        declarations.append("\(isolation)\(access)let \(methodName)Stub = PreviewableResponses()")
+        declarations.append("\(isolation)\(access)\(modifier)let \(methodName)Stub = PreviewableResponses()")
       } else {
         declarations.append(
           DoubleStorageBuilder.property(
             name: methodName + "Stub", type: returnType.trimmedDescription,
             value: try resolver.defaultValue(for: returnType), access: access,
-            isolated: memberIsolated, isolation: isolation
+            isolated: memberIsolated, isolation: isolation, nonisolated: nonisolated
           ))
       }
     }
 
+    let recording = DoubleStorageBuilder.recordingName(for: isolation)
     var body = [
-      "self.calledMethods.append(#function)",
-      "self.passedParameters[#function, default: []].append([\(parameters.joined(separator: ", "))])",
+      "self._previewable_calledMethods.append(#function)",
+      "self._previewable_\(recording)[#function, default: []].append([\(parameters.joined(separator: ", "))])",
     ]
     if !memberIsolated {
       body.insert(contentsOf: parameters.map { "Mercury.previewableRequireSendable(\($0))" }, at: 0)
@@ -200,7 +205,7 @@ enum PreviewableDoubleMemberBuilder {
     let constraints = function.genericWhereClause.map { " " + $0.trimmedDescription } ?? ""
     let attributes = function.attributes.isEmpty ? "" : function.attributes.trimmedDescription + "\n"
     let requirement = """
-      \(attributes)\(access)func \(methodName)\(generics)\(signature)\(constraints) {
+      \(attributes)\(access)\(modifier)func \(methodName)\(generics)\(signature)\(constraints) {
       \(methodBody)
       }
       """
@@ -240,15 +245,18 @@ enum PreviewableDoubleMemberBuilder {
     }
 
     let isolation = DoubleStorageBuilder.isolationAttributes(in: initializer.attributes, index: index)
-    let checks = isolated || !isolation.isEmpty
+    let nonisolated = initializer.modifiers.contains { $0.name.text == "nonisolated" }
+    let modifier = nonisolated ? "nonisolated " : ""
+    let checks = !nonisolated && (isolated || !isolation.isEmpty)
       ? "" : recorded.map { "Mercury.previewableRequireSendable(\($0))" }.joined(separator: "\n")
+    let recording = DoubleStorageBuilder.recordingName(for: isolation)
     let attributes = initializer.attributes.isEmpty ? "" : initializer.attributes.trimmedDescription + "\n"
     let optionalMark = initializer.optionalMark?.text ?? String()
     return """
-      \(attributes)\(access)init\(optionalMark)\(initializer.signature.generatedDescription) {
+      \(attributes)\(access)\(modifier)init\(optionalMark)\(initializer.signature.generatedDescription) {
       \(checks.indented(by: 2))
         self._previewable_calledMethods.append(#function)
-        self._previewable_passedParameters[#function, default: []].append([\(recorded.joined(separator: ", "))])
+        self._previewable_\(recording)[#function, default: []].append([\(recorded.joined(separator: ", "))])
       }
       """
   }

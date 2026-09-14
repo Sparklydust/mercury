@@ -1,24 +1,36 @@
-import LoremSwiftum
+//
+// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+//
+
+import Foundation
 
 /// Allocates recognizable values for one generation run, respecting numeric bounds.
 struct FakeDefaultValues {
 
-  private var strings: Set<String> = []
+  private var stringCount = 0
   private var numberCount = 0
   private var urlCount = 0
   private var uuidCount = 0
   private var dateCount = 0
 
-  /// Returns a quoted random phrase, retrying collisions before appending a count suffix.
+  /// Returns a distinct, repeatable phrase without randomizing generated source between builds.
   mutating func string() -> String {
-    for _ in 0..<100 {
-      let value = Lorem.words(2 + strings.count % 3)
-      if strings.insert(value).inserted { return String(reflecting: value) }
+    let count = 2 + stringCount % 3
+    var remainder = stringCount / 3
+    var phrase: [String] = []
+    for position in 0..<count {
+      phrase.append(Self.words[(remainder % Self.words.count + position) % Self.words.count])
+      remainder /= Self.words.count
     }
-    let value = "\(Lorem.words(2)) \(strings.count + 1)"
-    strings.insert(value)
-    return String(reflecting: value)
+    if remainder > 0 { phrase.append(String(remainder)) }
+    stringCount += 1
+    return String(reflecting: phrase.joined(separator: " "))
   }
+
+  private static let words = [
+    "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit",
+    "sed", "do", "eiusmod", "tempor", "incididunt", "ut", "labore", "dolore",
+  ]
 
   /// Returns a positive numeric literal, cycling within the supported bound for its type.
   /// - Parameter type: The numeric type's unqualified name.

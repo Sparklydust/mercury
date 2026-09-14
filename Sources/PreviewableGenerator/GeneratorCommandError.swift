@@ -9,10 +9,13 @@ enum GeneratorCommandError: Error, CustomStringConvertible {
 
   /// The command was invoked without the destination file argument.
   case missingOutputPath
+  /// The file-list option was invoked without exactly one JSON path.
+  case missingInputFileList
 
   var description: String {
     switch self {
     case .missingOutputPath: "error: PreviewableGenerator requires an output path"
+    case .missingInputFileList: "error: --input-file-list requires one JSON file path"
     }
   }
 }

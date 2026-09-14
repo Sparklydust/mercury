@@ -8,6 +8,29 @@ import Testing
 struct PreviewableSourceGeneratorTests {
 
   @Test
+  func generator_inputsAreUnchanged_outputIsIdentical() throws {
+    let source = "@PreviewableFake struct Model { let name: String; let title: String }"
+    let expected = try PreviewableSourceGenerator.generate(from: [source])
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result == expected, "Unchanged inputs must generate identical defaults and declarations.")
+  }
+
+  @Test
+  func generator_inputOrderChanges_outputIsIdentical() throws {
+    let files = [
+      PreviewableSourceFile(path: "A.swift", text: "@PreviewableFake struct First { let name: String }"),
+      PreviewableSourceFile(path: "B.swift", text: "@PreviewableFake struct Second { let name: String }"),
+    ]
+    let expected = try PreviewableSourceGenerator.generate(from: files)
+
+    let result = try PreviewableSourceGenerator.generate(from: files.reversed())
+
+    #expect(result == expected, "Build-system enumeration order must not change generated source.")
+  }
+
+  @Test
   func generator_declarationIsUnsupported_diagnosticIncludesSourceLocation() throws {
     let file = PreviewableSourceFile(
       path: "Service.swift",

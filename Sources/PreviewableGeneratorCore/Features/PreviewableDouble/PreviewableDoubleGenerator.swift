@@ -82,7 +82,20 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     var visited: Set<String> = []
     let members = try PreviewableRequirementFlattener.requirements(of: declaration, index: index, visited: &visited)
 
-    try validateNames(in: members)
+    var recordings: [String: String] = [:]
+    for member in members {
+      let attributes = member.decl.as(FunctionDeclSyntax.self)?.attributes
+        ?? member.decl.as(InitializerDeclSyntax.self)?.attributes
+      guard let attributes else { continue }
+      let isolation = DoubleStorageBuilder.isolationAttributes(in: attributes, index: index)
+      guard !isolation.isEmpty else { continue }
+      let name = DoubleStorageBuilder.recordingName(for: isolation)
+      if let existing = recordings[name], existing != isolation {
+        throw GenerationError.message("@PreviewableDouble actor recording '\(name)' conflicts with another actor")
+      }
+      recordings[name] = isolation
+    }
+    try validateNames(in: members, recordings: Set(recordings.keys))
     var stubDeclarations: [String] = []
     var requirementDeclarations: [String] = []
     var methodSignatures: [String: String] = [:]
@@ -142,7 +155,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       }
     }
 
-    var sections: [String] = ["private let _previewableLock = NSRecursiveLock()"]
+    var sections: [String] = ["nonisolated private let _previewableLock = NSRecursiveLock()"]
     if !stubDeclarations.isEmpty {
       sections.append(
         (["// Mock values"] + stubDeclarations).joined(separator: "\n")
@@ -165,15 +178,25 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
         "// Spy values",
         DoubleStorageBuilder.property(
           name: "calledMethods", type: "[String]", value: "[]", access: access + "private(set) ", isolated: true,
-          documentation: "The protocol method names invoked on this double."
+          documentation: "The protocol method names invoked on this double.", nonisolated: true
         ),
         DoubleStorageBuilder.property(
           name: "passedParameters", type: "[String: [[Any?]]]", value: "[:]", access: access + "private(set) ",
           isolated: true,
-          documentation: "The arguments captured for each invocation of a protocol method, in call order."
+          documentation: "The arguments recorded in the protocol's isolation, grouped by method.",
+          sharedBacking: true
         )
       ].joined(separator: "\n")
     )
+    for name in recordings.keys.sorted() {
+      sections.append(
+        DoubleStorageBuilder.property(
+          name: name, type: "[String: [[Any?]]]", value: "[:]", access: access + "private(set) ", isolated: true,
+          documentation: "The arguments recorded by requirements isolated to this actor, grouped by method.",
+          isolation: recordings[name] ?? ""
+        )
+      )
+    }
     if !requirementDeclarations.isEmpty {
       sections.append(
         (["// Protocol requirements"] + requirementDeclarations)
@@ -219,10 +242,12 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     )
   }
   /// Rejects requirement names that collide with generated storage, stubs, or recording members.
-  /// - Parameter members: The flattened protocol requirements.
+  /// - Parameters:
+  ///   - members: The flattened protocol requirements.
+  ///   - recordings: Names reserved for actor-isolated argument dictionaries.
   /// - Throws: `GenerationError` when a requirement uses a reserved or generated name.
-  private static func validateNames(in members: [MemberBlockItemSyntax]) throws {
-    let reserved: Set<String> = ["preview", "calledMethods", "passedParameters"]
+  private static func validateNames(in members: [MemberBlockItemSyntax], recordings: Set<String>) throws {
+    let reserved: Set<String> = Set(["preview", "calledMethods", "passedParameters"]).union(recordings)
     var generated = reserved
     var requirements: Set<String> = []
     var stubs: Set<String> = []
@@ -246,6 +271,9 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       }
     }
     generated.formUnion(stubs)
+    if let collision = stubs.intersection(recordings).sorted().first {
+      throw GenerationError.message("@PreviewableDouble stub '\(collision)' conflicts with an actor recording")
+    }
     if let collision = requirements.sorted().first(where: { generated.contains($0) || $0.hasPrefix("_previewable") }) {
       throw GenerationError.message("@PreviewableDouble requirement '\(collision)' conflicts with a generated member")
     }

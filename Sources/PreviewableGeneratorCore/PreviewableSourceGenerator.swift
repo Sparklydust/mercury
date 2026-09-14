@@ -22,6 +22,7 @@ public enum PreviewableSourceGenerator {
   /// - Returns: A compilable Swift source file containing the generated declarations.
   /// - Throws: `PreviewableDiagnostic` naming the declaration that must change.
   public static func generate(from files: [PreviewableSourceFile]) throws -> String {
+    let files = files.sorted { $0.path < $1.path }
     let trees = files.map { Parser.parse(source: $0.text) }
     let sourceMap = PreviewableSourceMap(files: files, trees: trees)
     var index = moduleIndex(of: trees)
