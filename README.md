@@ -37,11 +37,16 @@ let result = try await serviceDouble.name(for: 42)
 #expect(serviceDouble.calledMethods == ["name(for:)"])
 ```
 
-Use `<property>Stub` and `<method>Stub` for responses, `<method>ErrorStub` for a persistent error, and `<method>ErrorsStub` for queued errors. `calledMethods` and `passedParameters` record invocations; closure arguments are excluded. Stub access and recording are synchronized. Use a fresh double per test.
+Use `<property>Stub` and `<method>Stub` for responses, `<method>ErrorStub` for a persistent error,
+and `<method>ErrorsStub` for queued errors. `calledMethods` and `passedParameters` record invocations;
+closure arguments are excluded. Stub access and recording are synchronized. Use a fresh double per test.
 
-Nonisolated doubles require `Sendable` responses and arguments. Protocols and individual requirements retain their global-actor isolation.
+Nonisolated doubles require `Sendable` responses and arguments. Protocols and individual requirements retain
+their global-actor isolation.
 
-Requirements with an explicit actor attribute record arguments in that actor's dictionary: `@MainActor` uses `mainActorPassedParameters`, and `@Scope.Context` uses `scope_ContextPassedParameters`. Read these values on the corresponding actor. `calledMethods` records all calls.
+Actor-annotated requirements record arguments in a separate dictionary: `@MainActor` uses `mainActorPassedParameters`,
+and `@Scope.Context` uses `scope_ContextPassedParameters`. Read these on the corresponding actor.
+`calledMethods` records all calls.
 
 ### Generic methods
 
@@ -60,7 +65,8 @@ serverDouble.makeStub.set(nil, for: String?.self)
 serverDouble.makeStub.remove(for: Int.self)
 ```
 
-Generic responses are keyed by return type and must be `Sendable`. Constrain generic and associated result types accordingly. An explicit optional `nil` counts as configured; calling an unconfigured type traps.
+Generic responses are keyed by return type and must be `Sendable`. Constrain generic and associated result types
+accordingly. An explicit optional `nil` counts as configured; calling an unconfigured type traps.
 
 ## Model fakes
 
@@ -75,29 +81,13 @@ let profile = Profile.fake()
 let namedProfile = Profile.fake(name: "Alex")
 ```
 
-Generated parameters have repeatable defaults and accept overrides. Defaults cover common scalar types, optionals, collections, simple enums, and annotated types. Computed properties and initialized constants are excluded.
+Parameters have repeatable defaults and accept overrides. Defaults cover common scalar types, optionals,
+collections, simple enums, and annotated types. Computed properties and initialized constants are excluded.
+Override defaults when application validation requires specific values.
 
-### Throwing construction
+Factories preserve throwing construction; call them with `try` when required.
 
-If construction can throw, the generated `fake()` factory throws:
-
-```swift
-enum ValidationError: Error { case invalidCount }
-
-@PreviewableFake
-struct CheckedValue {
-  let count: Int
-
-  init(count: Int) throws {
-    guard count > 0 else { throw ValidationError.invalidCount }
-    self.count = count
-  }
-}
-
-let value = try CheckedValue.fake()
-```
-
-For an external type, specify the accessible initializer:
+For an external type, describe its accessible initializer:
 
 ```swift
 @PreviewableFake(
@@ -113,25 +103,58 @@ Omit `throwing` for a nonthrowing initializer.
 
 Use `ProfileServiceDouble.preview` for a shared preview instance. It retains state between accesses.
 
-Fakes and doubles are available in Debug. Release builds retain their API signatures for compilation; calling them traps.
+Double classes, stub and spy storage, and fake construction compile only under `#if DEBUG`.
+Keep `DEBUG` out of Release compilation conditions.
+
+Release retains placeholder `fake()` factories and protocol-typed preview accessors so preview code can type-check.
+Calling these placeholders traps; fake calls are not rejected at compile time. Keep their use in tests or previews,
+or guard call sites with `#if DEBUG`.
+
+The bundled generator and macro executables run on the build machine and are not embedded in the application.
 
 ## Supported construction
 
 Unsupported construction produces a diagnostic on the annotated declaration.
 
-- Structs need a usable memberwise or matching accessible initializer. Classes need mutable generated fields and an accessible parameterless initializer; subclasses must declare it explicitly. Hidden fields need a matching initializer.
+- Structs need a usable memberwise or matching accessible initializer. Hidden fields need a matching initializer.
+- Classes need mutable fields and an accessible parameterless initializer; subclasses must declare it explicitly.
 - Generic fields need constructible defaults; a bare `Value` has none. Required nested defaults cannot form a cycle.
 - Nested types need accessible ancestors. Put actor isolation on the type, not its initializer.
-- Inherited protocols must be readable in the same target. Associated types, protocol-level constraints, overloads, static requirements, subscripts, and generic thrown errors are unsupported.
+- Inherited protocols must be readable in the same target. Associated types, protocol-level constraints, overloads,
+  static requirements, subscripts, and generic thrown errors are unsupported.
 - Annotations inside conditional blocks, function bodies, or extensions with nested declarations are unsupported.
 - A throwing fake cannot supply a nonthrowing double's stored default.
 
-Override defaults when application validation requires specific values.
-
 ## Development
 
-Run `swift test` locally. CI also checks generated consumers, runs the full suite with Thread Sanitizer, and builds Release.
+Run `swift test` locally. CI also verifies bundled tools and generated consumers, runs tests with Thread Sanitizer,
+and builds Release.
 
-Consumers use bundled macOS generator and macro executables. A small launcher starts the macro plugin; consumers do not compile SwiftSyntax for Mercury. Generation caches source contents and preserves unchanged output.
+### Updating bundled tools
 
-After editing either tool, run `python3 Scripts/generator-artifact.py build` and include the updated artifact and macro revision. CI verifies source fingerprints and checksums. Set `MERCURY_BUILD_GENERATOR_FROM_SOURCE=1` to develop using source builds of both tools.
+Mercury bundles the generator and macro plugin to avoid compiling them and SwiftSyntax in consumer builds.
+Consumers do not need to rebuild these binaries.
+
+Rebuild after changing generator, generator core, macro implementation or launcher sources, `Package.swift`,
+`Package.resolved`, or `Scripts/generator-artifact.py`. README and test-only edits do not require rebuilding.
+
+From the repository root, using macOS with Xcode 27 / Swift 6.4 and Python 3:
+
+```sh
+python3 Scripts/generator-artifact.py build --version 1.0.0
+```
+
+Use the intended release version. The command builds both tools for Apple Silicon and Intel, packages and signs them,
+updates checksums and the macro revision, and verifies the result. Include the following with the source changes:
+
+- `Artifacts/PreviewableGenerator.artifactbundle/` (executables, metadata, and SwiftSyntax license).
+- `Sources/PreviewableMacrosLauncher/BundledMacroRevision.swift`.
+
+To verify the bundle without rebuilding:
+
+```sh
+python3 Scripts/generator-artifact.py verify
+```
+
+Verification checks source fingerprints, checksums, architectures, and signatures. CI rejects a stale bundle.
+For source development, run `MERCURY_BUILD_GENERATOR_FROM_SOURCE=1 swift test` before rebuilding the bundle.
