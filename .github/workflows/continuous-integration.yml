@@ -1,0 +1,33 @@
+name: Mercury Actions
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main", "develop"]
+  schedule:
+    - cron: "0 4 * * 1" # Mondays at 4am.
+
+permissions:
+  contents: read
+
+jobs:
+  continuous-integration:
+    runs-on: xcode-27
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Debug
+        run: |
+          swift --version
+          swift build
+
+      - name: Verify Generated Consumers
+        run: python3 Scripts/verify-generated.py --products "$(swift build --show-bin-path)"
+
+      - name: Run Tests with Thread Sanitizer
+        run: swift test --sanitize thread
+
+      - name: Build Release
+        run: swift build -c release
