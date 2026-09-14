@@ -74,7 +74,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     let isolated = DoubleStorageBuilder.isIsolated(declaration, index: index)
     let protocolName = declaration.name.text
     let doubleName = PreviewableDoubleNaming.doubleName(for: protocolName)
-    guard !index.declaresType(doubleName), index.protocols[doubleName] == nil else {
+    guard index.typeAccess[doubleName] == nil else {
       throw GenerationError.message(
         "@PreviewableDouble generated type '\(doubleName)' conflicts with an existing declaration")
     }
@@ -127,7 +127,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       }
       if let initializer = member.decl.as(InitializerDeclSyntax.self) {
         if let requirement = try PreviewableDoubleMemberBuilder.initializerDeclaration(
-          from: initializer, access: access, isolated: isolated)
+          from: initializer, access: access, isolated: isolated, index: index)
         {
           requirementDeclarations.append(requirement)
         }

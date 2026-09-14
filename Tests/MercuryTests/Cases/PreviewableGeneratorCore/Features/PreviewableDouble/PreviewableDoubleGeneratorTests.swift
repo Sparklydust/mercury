@@ -67,6 +67,45 @@ struct PreviewableDoubleGeneratorTests {
     )
   }
 
+  @Test(arguments: ["MainActor", "Context", "Scope.Context"])
+  func generator_requirementsHaveActorIsolation_sendableChecksAreOmitted(_ actorName: String) throws {
+    let source = """
+      @globalActor actor Context { static let shared = Context() }
+      enum Scope { @globalActor actor Context { static let shared = Context() } }
+      final class Payload {}
+      @PreviewableDouble protocol ServiceProtocol {
+        @\(actorName) var payload: Payload? { get set }
+        @\(actorName) func store(_ value: Payload) -> Payload?
+        @\(actorName) init(value: Payload)
+      }
+      """
+
+    let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let result = generated.contains("previewableRequireSendable(")
+
+    #expect(!result, "Actor-isolated requirements and stubs must accept actor-protected non-Sendable values.")
+  }
+
+  @Test(arguments: [
+    "<Value: Sendable>() -> Value",
+    "<Value>() -> Value where Value: Swift.Sendable",
+    "<Value: Codable & Sendable>() -> [Value]",
+    "<Value: Transferable>() -> Value?",
+    "<Value: ResponseConstraint>() -> Value",
+  ])
+  func generator_genericResponseIsSendable_responseStoreIsGenerated(_ signature: String) throws {
+    let source = """
+      protocol Transferable: Sendable {}
+      typealias ResponseConstraint = Transferable
+      @PreviewableDouble protocol ServiceProtocol { func make\(signature) }
+      """
+    let expected = "let makeStub = PreviewableResponses()"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "Known Sendable constraints must preserve generic response support.")
+  }
+
   @Test(arguments: [
     "identifierStub: UUID = UUID()",
     "var identifier: UUID { identifierStub }",

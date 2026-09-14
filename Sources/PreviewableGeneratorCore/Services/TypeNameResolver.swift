@@ -38,6 +38,7 @@ final class TypeNameResolver: SyntaxRewriter {
       genericParameters: genericParameters.union(node.genericParameterClause?.parameters.map(\.name.text) ?? [])
     )
     var result = node
+    result.attributes = local.rewrite(node.attributes).cast(AttributeListSyntax.self)
     if let generics = node.genericParameterClause {
       result.genericParameterClause = local.rewrite(generics).cast(GenericParameterClauseSyntax.self)
     }

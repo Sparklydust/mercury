@@ -11,19 +11,21 @@ enum DoubleStorageBuilder {
   ///   - access: Access modifiers, including any required trailing space.
   ///   - isolated: Whether setter assignments may omit the `Sendable` check.
   ///   - documentation: The summary attached to the exposed property, without a comment marker.
+  ///   - isolation: Global-actor attributes applied to both storage and its accessors.
   static func property(
     name: String,
     type: String,
     value: String,
     access: String,
     isolated: Bool,
-    documentation: String? = nil
+    documentation: String? = nil,
+    isolation: String = ""
   ) -> String {
     let check = isolated ? "" : "previewableRequireSendable(newValue)\n"
     let comment = documentation.map { "/// \($0)\n" } ?? ""
     return """
-      private var _previewable_\(name): \(type) = \(value)
-      \(comment)\(access)var \(name): \(type) {
+      \(isolation)private var _previewable_\(name): \(type) = \(value)
+      \(comment)\(isolation)\(access)var \(name): \(type) {
         get { _previewableLock.withLock { _previewable_\(name) } }
         set {
       \(check.indented(by: 4))    _previewableLock.withLock { _previewable_\(name) = newValue }
@@ -35,6 +37,27 @@ enum DoubleStorageBuilder {
         }
       }
       """
+  }
+
+  /// Returns global-actor attributes with trailing newlines, or an empty string for nonisolated declarations.
+  /// - Parameters:
+  ///   - attributes: Attributes on the protocol or requirement.
+  ///   - index: Global actors available in the module.
+  ///   - scope: Enclosing type names used to resolve an unqualified actor.
+  static func isolationAttributes(
+    in attributes: AttributeListSyntax,
+    index: ModuleIndex,
+    scope: [String] = []
+  ) -> String {
+    attributes.compactMap { element -> String? in
+      guard case .attribute(let attribute) = element else { return nil }
+      let name = attribute.attributeName.trimmedDescription
+      let resolved = index.resolve(name, scope: scope) ?? name
+      guard ["MainActor", "Swift.MainActor", "_Concurrency.MainActor"].contains(name)
+        || index.globalActors.contains(resolved)
+      else { return nil }
+      return attribute.trimmedDescription + "\n"
+    }.joined()
   }
 
   /// Recognizes explicit global-actor isolation, including inherited protocol isolation.
@@ -50,13 +73,7 @@ enum DoubleStorageBuilder {
     let name = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
     let scope = name.split(separator: ".").map(String.init)
     guard !visited.contains(name) else { return false }
-    if declaration.attributes.contains(where: {
-      guard case .attribute(let attribute) = $0 else { return false }
-      let attributeName = attribute.attributeName.trimmedDescription
-      if ["MainActor", "Swift.MainActor", "_Concurrency.MainActor"].contains(attributeName) { return true }
-      guard let resolved = index.resolve(attributeName, scope: scope) else { return false }
-      return index.globalActors.contains(resolved)
-    }) {
+    if !isolationAttributes(in: declaration.attributes, index: index, scope: scope).isEmpty {
       return true
     }
     return (declaration.inheritanceClause?.inheritedTypes ?? []).contains {

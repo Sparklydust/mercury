@@ -63,7 +63,8 @@ enum FakeDeclarationResolver {
       throw GenerationError.message("@PreviewableFake classes require mutable fake properties and an accessible init()")
     }
     let initializerThrows = try PreviewableFakeValidator.validateInitializer(
-      in: members, of: annotation.qualifiedName, isClass: isClass, properties: rawProperties, index: index
+      in: members, of: annotation.qualifiedName, isClass: isClass, properties: rawProperties, index: index,
+      inheritance: annotation.declaration.as(ClassDeclSyntax.self)?.inheritanceClause
     )
     try PreviewableFakeValidator.validateFactoryAccess(
       of: annotation.qualifiedName, access: index.typeAccess[annotation.qualifiedName] ?? .internal,

@@ -39,7 +39,7 @@ let result = try await serviceDouble.name(for: 42)
 
 Use `<property>Stub` and `<method>Stub` for responses, `<method>ErrorStub` for a persistent error, and `<method>ErrorsStub` for queued errors. `calledMethods` and `passedParameters` record invocations; closure arguments are excluded. Stub access and recording are synchronized. Use a fresh double per test.
 
-Nonisolated doubles require `Sendable` responses and arguments. Globally isolated protocols retain their isolation.
+Nonisolated doubles require `Sendable` responses and arguments. Protocols and individual requirements retain their global-actor isolation.
 
 ### Generic methods
 
@@ -58,7 +58,7 @@ serverDouble.makeStub.set(nil, for: String?.self)
 serverDouble.makeStub.remove(for: Int.self)
 ```
 
-Generic responses are keyed by return type. An explicit optional `nil` counts as configured; calling an unconfigured type traps.
+Generic responses are keyed by return type. Generic response parameters need a known `Sendable` constraint. An explicit optional `nil` counts as configured; calling an unconfigured type traps.
 
 ## Model fakes
 
@@ -117,7 +117,7 @@ Fakes and doubles are available in Debug. Release builds retain their API signat
 
 Unsupported construction produces a diagnostic on the annotated declaration.
 
-- Structs need a usable memberwise or matching accessible initializer. Classes need mutable generated fields and an accessible parameterless initializer. Hidden fields need a matching initializer.
+- Structs need a usable memberwise or matching accessible initializer. Classes need mutable generated fields and an accessible parameterless initializer; subclasses must declare it explicitly. Hidden fields need a matching initializer.
 - Generic fields need constructible defaults; a bare `Value` has none. Required nested defaults cannot form a cycle.
 - Nested types need accessible ancestors. Put actor isolation on the type, not its initializer.
 - Inherited protocols must be readable in the same target. Associated types, protocol-level constraints, overloads, static requirements, subscripts, and generic thrown errors are unsupported.

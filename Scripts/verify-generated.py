@@ -72,6 +72,53 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     print('PASS', name, flush=True)
     return output
 
+  for number, initializer in enumerate(['init(token: Int) {}', 'init() throws {}']):
+    verify('inherited-initializer-' + str(number),
+      'class Base { ' + initializer + ' }\n@PreviewableFake final class Model: Base { var value = 0 }',
+      generation_error="cannot verify inherited 'init()'")
+  for throwing in [False, True]:
+    effects = ' throws' if throwing else ''
+    call = 'try ' if throwing else ''
+    verify('explicit-subclass-initializer-' + str(throwing),
+      'class Base { init(token: Int)' + effects + ' {} }\n'
+      '@PreviewableFake final class Model: Base { var value = 0; init()' + effects + ' { ' + call + 'super.init(token: 1) } }',
+      'let value = ' + call + 'Model.fake(value: 42)\nprecondition(value.value == 42)')
+  verify('class-with-protocol-conformance',
+    'protocol Named {}\n@PreviewableFake final class Model: Named { var value = 0 }',
+    'precondition(Model.fake(value: 42).value == 42)')
+  for number, alias in enumerate(['typealias ServiceDouble = Int', 'typealias ServiceDouble<Value> = [Value]']):
+    verify('double-alias-collision-' + str(number), alias + '\n@PreviewableDouble protocol Service {}',
+      generation_error="generated type 'ServiceDouble' conflicts")
+  verify('nested-double-alias', 'enum Scope { typealias ServiceDouble = Int }\n@PreviewableDouble protocol Service {}')
+  for number, signature in enumerate(['<Value>() -> Value', '<Value: Codable>() -> [Value]']):
+    verify('unconstrained-generic-response-' + str(number),
+      '@PreviewableDouble protocol ServiceProtocol { func make' + signature + ' }',
+      generation_error='requires a Sendable constraint')
+  for number, signature in enumerate([
+    '<Value: Sendable>() -> Value', '<Value>() -> Value where Value: Swift.Sendable',
+    '<Value: Codable & Sendable>() -> [Value]', '<Value: Transferable>() -> Value?',
+  ]):
+    verify('constrained-generic-response-' + str(number),
+      'protocol Transferable: Sendable {}\n@PreviewableDouble protocol ServiceProtocol { func make' + signature + ' }')
+  for actor in ['MainActor', 'Context', 'Scope.Context']:
+    actor_source = (
+      '@globalActor actor Context { static let shared = Context() }\n'
+      'enum Scope { @globalActor actor Context { static let shared = Context() } }\n'
+      'final class Payload {}\n@PreviewableDouble protocol ServiceProtocol {\n'
+      '  @' + actor + ' var payload: Payload? { get set }\n'
+      '  @' + actor + ' func store(_ value: Payload) -> Payload?\n'
+      '  @' + actor + ' init(value: Payload)\n'
+      '  func count() -> Int\n}')
+    verify('requirement-actor-' + actor, actor_source)
+    verify('requirement-stub-isolation-' + actor, actor_source,
+      'nonisolated func configure(_ double: ServiceDouble) { double.payloadStub = Payload() }',
+      compile_error='isolated property')
+  verify('inherited-requirement-actor',
+    'final class Payload {}\nenum Scope {\n'
+    '  @globalActor actor Context { static let shared = Context() }\n'
+    '  protocol Base { @Context func store(_ value: Payload) }\n'
+    '}\n@PreviewableDouble protocol ServiceProtocol: Scope.Base {}')
+
   verify('empty-fake-parentheses', '@PreviewableFake() struct Model { let value: Int }',
     'precondition(Model.fake(value: 42).value == 42)')
   verify('empty-class-parentheses', '@PreviewableFake() final class Model { var value = 0 }',

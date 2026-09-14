@@ -16,6 +16,7 @@ enum PreviewableFakeValidator {
   ///   - isClass: Whether construction requires a parameterless class initializer.
   ///   - properties: The factory inputs in initializer argument order.
   ///   - index: Module declarations used to resolve equivalent parameter type spellings.
+  ///   - inheritance: Inherited types checked before accepting an implicit class initializer.
   /// - Returns: Whether the selected initializer throws.
   /// - Throws: `GenerationError` when no usable initializer exists or multiple initializers match.
   static func validateInitializer(
@@ -23,7 +24,8 @@ enum PreviewableFakeValidator {
     of typeName: String,
     isClass: Bool,
     properties: [StoredProperty],
-    index: ModuleIndex
+    index: ModuleIndex,
+    inheritance: InheritanceClauseSyntax? = nil
   ) throws -> Bool {
     let scope = typeName.split(separator: ".").map(String.init)
     let initializers = members.compactMap { $0.decl.as(InitializerDeclSyntax.self) }
@@ -62,7 +64,24 @@ enum PreviewableFakeValidator {
         """
       )
     }
-    // Without a declared initializer, a class only gets an implicit `init()` when nothing needs a value.
+    for inherited in inheritance?.inheritedTypes ?? [] {
+      var type = inherited.type
+      while let attributed = type.as(AttributedTypeSyntax.self) { type = attributed.baseType }
+      let name = type.trimmedDescription
+      let isProtocol: Bool
+      if let resolved = index.resolve(name, scope: scope) {
+        isProtocol = index.protocols[resolved] != nil
+      } else {
+        isProtocol = ["Sendable", "Swift.Sendable", "AnyObject", "Swift.AnyObject"].contains(name)
+      }
+      guard isProtocol else {
+        throw GenerationError.message(
+          "@PreviewableFake cannot verify inherited 'init()' for '\(typeName)' "
+            + "— declare an accessible parameterless initializer"
+        )
+      }
+    }
+    // A root class only gets an implicit `init()` when every stored property has a value.
     guard let uninitialized = PreviewableStoredPropertyCollector.firstPropertyWithoutInitialValue(in: members) else {
       return false
     }

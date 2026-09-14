@@ -80,6 +80,19 @@ struct PreviewableFakeDiagnosticsTests {
       result?.contains(expected) == true, "Initializer-specific actor isolation must produce a source diagnostic.")
   }
 
+  @Test(arguments: ["init(token: Int) {}", "init() throws {}"])
+  func generator_subclassInheritsInitializer_explicitInitializerIsRequired(_ initializer: String) {
+    let source = """
+      class Base { \(initializer) }
+      @PreviewableFake final class Model: Base { var value = 0 }
+      """
+    let expected = "cannot verify inherited 'init()' for 'Model'"
+
+    let result = generatorDiagnosticMessage(for: source)
+
+    #expect(result?.contains(expected) == true, "Inherited initialization must not be assumed to be nonthrowing init().")
+  }
+
   @Test(arguments: ["String", "Wrong", "Swift.Int"])
   func generator_initializerTypeIsNotEquivalent_diagnosticIsEmitted(_ parameterType: String) {
     let source = """

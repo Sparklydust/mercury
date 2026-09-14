@@ -28,6 +28,9 @@ enum PreviewableDoubleMemberBuilder {
       )
     }
 
+    let isolation = DoubleStorageBuilder.isolationAttributes(in: declaration.attributes, index: resolver.index)
+    let memberIsolated = isolated || !isolation.isEmpty
+    let attributes = declaration.attributes.isEmpty ? "" : declaration.attributes.trimmedDescription + "\n"
     var properties: [GeneratedProperty] = []
     for binding in declaration.bindings {
       guard let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
@@ -50,7 +53,8 @@ enum PreviewableDoubleMemberBuilder {
       resolver.fieldName = name
       let defaultValue = try resolver.defaultValue(for: type)
       let stub = DoubleStorageBuilder.property(
-        name: name + "Stub", type: printedType, value: defaultValue, access: access, isolated: isolated
+        name: name + "Stub", type: printedType, value: defaultValue, access: access,
+        isolated: memberIsolated, isolation: isolation
       )
 
       if accessorBlock.isSettable {
@@ -58,7 +62,7 @@ enum PreviewableDoubleMemberBuilder {
           GeneratedProperty(
             stub: stub,
             requirement: """
-              \(access)var \(name): \(printedType) {
+              \(attributes)\(access)var \(name): \(printedType) {
                 get { \(name)Stub }
                 set { \(name)Stub = newValue }
               }
@@ -69,7 +73,7 @@ enum PreviewableDoubleMemberBuilder {
         properties.append(
           GeneratedProperty(
             stub: stub,
-            requirement: "\(access)var \(name): \(printedType) { \(name)Stub }"
+            requirement: "\(attributes)\(access)var \(name): \(printedType) { \(name)Stub }"
           )
         )
       }
@@ -100,6 +104,8 @@ enum PreviewableDoubleMemberBuilder {
     }
 
     let methodName = function.name.text
+    let isolation = DoubleStorageBuilder.isolationAttributes(in: function.attributes, index: resolver.index)
+    let memberIsolated = isolated || !isolation.isEmpty
     let isGeneric = function.genericParameterClause != nil
     resolver.fieldName = methodName
     let signatureTypes =
@@ -137,12 +143,14 @@ enum PreviewableDoubleMemberBuilder {
       }
       declarations.append(
         DoubleStorageBuilder.property(
-          name: methodName + "ErrorStub", type: "(\(thrownType))?", value: ".none", access: access, isolated: isolated
+          name: methodName + "ErrorStub", type: "(\(thrownType))?", value: ".none", access: access,
+          isolated: memberIsolated, isolation: isolation
         ))
       // A retrying caller needs a different outcome per call, which one stored error cannot express.
       declarations.append(
         DoubleStorageBuilder.property(
-          name: methodName + "ErrorsStub", type: "[\(thrownType)]", value: "[]", access: access, isolated: isolated
+          name: methodName + "ErrorsStub", type: "[\(thrownType)]", value: "[]", access: access,
+          isolated: memberIsolated, isolation: isolation
         ))
     }
 
@@ -150,12 +158,14 @@ enum PreviewableDoubleMemberBuilder {
     let returnsValue = returnType.map { !DefaultValueResolver.isVoid($0) } ?? false
     if let returnType, returnsValue {
       if isGeneric {
-        declarations.append("\(access)let \(methodName)Stub = PreviewableResponses()")
+        try GenericResponseValidator.validate(function, index: resolver.index)
+        declarations.append("\(isolation)\(access)let \(methodName)Stub = PreviewableResponses()")
       } else {
         declarations.append(
           DoubleStorageBuilder.property(
             name: methodName + "Stub", type: returnType.trimmedDescription,
-            value: try resolver.defaultValue(for: returnType), access: access, isolated: isolated
+            value: try resolver.defaultValue(for: returnType), access: access,
+            isolated: memberIsolated, isolation: isolation
           ))
       }
     }
@@ -164,7 +174,7 @@ enum PreviewableDoubleMemberBuilder {
       "self.calledMethods.append(#function)",
       "self.passedParameters[#function, default: []].append([\(parameters.joined(separator: ", "))])",
     ]
-    if !isolated {
+    if !memberIsolated {
       body.insert(contentsOf: parameters.map { "Mercury.previewableRequireSendable(\($0))" }, at: 0)
     }
     if isThrowing {
@@ -206,11 +216,13 @@ enum PreviewableDoubleMemberBuilder {
   ///   - initializer: The initializer requirement to witness.
   ///   - access: The generated member's access modifier prefix.
   ///   - isolated: Whether recorded values may rely on global-actor isolation.
+  ///   - index: Global actors available for resolving initializer isolation.
   /// - Throws: `GenerationError` when an argument has no local name for invocation recording.
   static func initializerDeclaration(
     from initializer: InitializerDeclSyntax,
     access: String,
-    isolated: Bool
+    isolated: Bool,
+    index: ModuleIndex
   ) throws -> String? {
     let parameters = Array(initializer.signature.parameterClause.parameters)
     // A synchronous, nonthrowing, nonfailable `init()` also witnesses weaker parameterless requirements.
@@ -227,10 +239,13 @@ enum PreviewableDoubleMemberBuilder {
       recorded.append(localName)
     }
 
-    let checks = isolated ? "" : recorded.map { "Mercury.previewableRequireSendable(\($0))" }.joined(separator: "\n")
+    let isolation = DoubleStorageBuilder.isolationAttributes(in: initializer.attributes, index: index)
+    let checks = isolated || !isolation.isEmpty
+      ? "" : recorded.map { "Mercury.previewableRequireSendable(\($0))" }.joined(separator: "\n")
+    let attributes = initializer.attributes.isEmpty ? "" : initializer.attributes.trimmedDescription + "\n"
     let optionalMark = initializer.optionalMark?.text ?? String()
     return """
-      \(access)init\(optionalMark)\(initializer.signature.generatedDescription) {
+      \(attributes)\(access)init\(optionalMark)\(initializer.signature.generatedDescription) {
       \(checks.indented(by: 2))
         self._previewable_calledMethods.append(#function)
         self._previewable_passedParameters[#function, default: []].append([\(recorded.joined(separator: ", "))])

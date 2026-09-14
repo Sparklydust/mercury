@@ -9,6 +9,29 @@ struct PreviewableDoubleDiagnosticsTests {
 
   @Test(arguments: [
     (
+      "typealias ServiceDouble = Int\n@PreviewableDouble protocol Service {}",
+      "generated type 'ServiceDouble' conflicts with an existing declaration"
+    ),
+    (
+      "typealias ServiceDouble<Value> = [Value]\n@PreviewableDouble protocol Service {}",
+      "generated type 'ServiceDouble' conflicts with an existing declaration"
+    ),
+    (
+      "@PreviewableDouble protocol Service { func make<Value>() -> Value }",
+      "generic response 'Value' in 'make' requires a Sendable constraint"
+    ),
+    (
+      "@PreviewableDouble protocol Service { func make<Value: Codable>() -> [Value] }",
+      "generic response 'Value' in 'make' requires a Sendable constraint"
+    ),
+    (
+      """
+      enum Domain { protocol Sendable {} }
+      @PreviewableDouble protocol Service { func make<Value: Domain.Sendable>() -> Value }
+      """,
+      "generic response 'Value' in 'make' requires a Sendable constraint"
+    ),
+    (
       """
       protocol BaseProtocol { func reset() }
       @PreviewableDouble
