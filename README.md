@@ -58,16 +58,18 @@ protocol ServerProtocol: Sendable {
 }
 ```
 
+Configure the response, then call the original protocol method:
+
 ```swift
 let serverDouble = ServerDouble()
 serverDouble.makeStub.set("ready", for: String.self)
-serverDouble.makeStub.set(42, for: Int.self)
-serverDouble.makeStub.set(nil, for: String?.self)
-serverDouble.makeStub.remove(for: Int.self)
+let result = try await serverDouble.make(for: String.self)
+#expect(result == "ready")
 ```
 
-Generic responses are keyed by return type and must be `Sendable`. Constrain generic and associated result types
-accordingly. An explicit optional `nil` counts as configured; calling an unconfigured type traps.
+`make(for:)` keeps the original signature. `makeStub` configures its responses for tests and previews.
+Each concrete return type needs its own `Sendable` response because the method can return different types.
+Calling an unconfigured type traps. An explicit optional `nil` counts as configured.
 
 ## Model fakes
 
