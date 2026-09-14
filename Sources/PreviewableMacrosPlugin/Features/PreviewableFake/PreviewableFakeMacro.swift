@@ -24,25 +24,30 @@ struct PreviewableFakeMacro: PeerMacro {
     providingPeersOf declaration: some DeclSyntaxProtocol,
     in context: some MacroExpansionContext
   ) throws -> [DeclSyntax] {
-    let declaresParameters = node.arguments != nil
+    let declaresParameters: Bool
+    if case .argumentList(let arguments) = node.arguments {
+      declaresParameters = !arguments.isEmpty
+    } else {
+      declaresParameters = node.arguments != nil
+    }
 
     if let extensionDeclaration = declaration.as(ExtensionDeclSyntax.self) {
       try validate(extensionDeclaration, declaresParameters: declaresParameters)
     } else if declaration.is(StructDeclSyntax.self) || declaration.is(ClassDeclSyntax.self) {
       guard !declaresParameters else {
         throw PreviewableMacroError.message(
-                    """
-                    @PreviewableFake reads the stored properties of a type declared in this module \
-                    — remove 'parameters:'
-                    """
+          """
+          @PreviewableFake reads the stored properties of a type declared in this module \
+          — remove 'parameters:'
+          """
         )
       }
     } else {
       throw PreviewableMacroError.message(
-                """
-                @PreviewableFake can only be applied to a structure, a class, or an extension of a type declared \
-                outside this module
-                """
+        """
+        @PreviewableFake can only be applied to a structure, a class, or an extension of a type declared \
+        outside this module
+        """
       )
     }
 
@@ -51,19 +56,19 @@ struct PreviewableFakeMacro: PeerMacro {
   }
 }
 
-private extension PreviewableFakeMacro {
+extension PreviewableFakeMacro {
 
   /// Validates an extension the generator has to take on trust, having never read the extended type.
-  static func validate(
+  fileprivate static func validate(
     _ declaration: ExtensionDeclSyntax,
     declaresParameters: Bool
   ) throws {
     guard declaresParameters else {
       throw PreviewableMacroError.message(
-                """
-                @PreviewableFake cannot read a type declared outside this module \
-                — declare its initializer parameters in 'parameters:'
-                """
+        """
+        @PreviewableFake cannot read a type declared outside this module \
+        — declare its initializer parameters in 'parameters:'
+        """
       )
     }
     guard declaration.genericWhereClause == nil else {

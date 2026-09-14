@@ -5,10 +5,13 @@
 import Foundation
 import Testing
 
-@Suite
 struct PreviewableDoubleBehaviourTests {
 
-  private let sut = CatalogueServiceDouble()
+  private var sut: CatalogueServiceDouble
+
+  init() {
+    sut = CatalogueServiceDouble()
+  }
 
   @Test
   func double_titleStubIsAssigned_requirementReturnsStub() {

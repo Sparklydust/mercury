@@ -5,7 +5,6 @@
 import PreviewableGeneratorCore
 import Testing
 
-@Suite
 struct PreviewableDoubleGeneratorTests {
 
   private let source = """
@@ -228,5 +227,51 @@ struct PreviewableDoubleGeneratorTests {
       result.components(separatedBy: "init()").count == 2,
       "The double already declares `init()`, so witnessing the requirement again would not compile."
     )
+  }
+
+  @Test(arguments: ["init() throws", "init?()", "init!()", "init() async throws"])
+  func generator_parameterlessRequirementIsWeaker_noDuplicateInitializerIsGenerated(_ initializer: String) throws {
+    let source = "@PreviewableDouble protocol Service { \(initializer) }"
+    let expected = 1
+
+    let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let result = generated.components(separatedBy: "\n").filter { $0.contains("init") && $0.contains("()") }.count
+
+    #expect(result == expected, "The existing nonthrowing, nonfailable initializer must witness the requirement once.")
+  }
+
+  @Test(arguments: ["Swift.Sendable", "Swift.AnyObject", "@preconcurrency Swift.Sendable"])
+  func generator_markerProtocolIsQualified_doubleIsGenerated(_ marker: String) throws {
+    let source = "@PreviewableDouble protocol Service: \(marker) {}"
+    let expected = "final class ServiceDouble"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(
+      result.contains(expected), "Qualified standard marker protocols must not require module-local declarations.")
+  }
+
+  @Test
+  func generator_unrelatedQualifiedProtocolSharesMarkerName_requirementsArePreserved() throws {
+    let source = """
+      enum Domain { protocol Sendable { func load() } }
+      @PreviewableDouble protocol Service: Domain.Sendable {}
+      """
+    let expected = "func load()"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "An unrelated qualified protocol must not be mistaken for a standard marker.")
+  }
+
+  @Test
+  func generator_publicProtocolHasInternalParent_doubleAccessIsCapped() throws {
+    let source = "enum Scope { @PreviewableDouble public protocol Service {} }"
+    let expected = "final class ServiceDouble: Scope.Service, @unchecked Sendable {"
+
+    let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let result = generated.components(separatedBy: "\n").first { $0.contains("final class ServiceDouble") }
+
+    #expect(result == expected, "A generated top-level double must respect its protocol's effective visibility.")
   }
 }

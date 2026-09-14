@@ -213,9 +213,8 @@ enum PreviewableDoubleMemberBuilder {
     isolated: Bool
   ) throws -> String? {
     let parameters = Array(initializer.signature.parameterClause.parameters)
-    let hasEffects = initializer.signature.effectSpecifiers != nil
-    // The double already declares `init()`, which witnesses a parameterless requirement.
-    guard !parameters.isEmpty || hasEffects || initializer.optionalMark != nil else { return .none }
+    // A synchronous, nonthrowing, nonfailable `init()` also witnesses weaker parameterless requirements.
+    guard !parameters.isEmpty else { return .none }
 
     var recorded: [String] = []
     for parameter in parameters {

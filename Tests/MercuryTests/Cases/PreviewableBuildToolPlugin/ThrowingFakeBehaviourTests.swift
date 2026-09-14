@@ -4,7 +4,6 @@
 
 import Testing
 
-@Suite
 struct ThrowingFakeBehaviourTests {
 
   @Test

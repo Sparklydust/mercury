@@ -15,8 +15,10 @@ struct ModuleIndex {
   var annotatedProtocols: [String: String] = [:]
   /// Every nominal type declared in the module, by qualified name.
   var declaredTypes: Set<String> = []
-  /// The declared visibility of every nominal type, by qualified name.
+  /// The effective visibility of indexed types, protocols, and aliases, including enclosing types.
   var typeAccess: [String: AccessLevel] = [:]
+  /// Nongeneric typealias targets keyed by qualified declaration name.
+  var typeAliases: [String: TypeSyntax] = [:]
 
   /// Nominal types declared with generic parameters, by qualified name.
   var genericTypes: Set<String> = []
@@ -41,11 +43,20 @@ struct ModuleIndex {
   func resolve(_ name: String, scope: [String]) -> String? {
     for count in stride(from: scope.count, through: 0, by: -1) {
       let candidate = (Array(scope.prefix(count)) + [name]).joined(separator: ".")
-      if declaredTypes.contains(candidate) || protocols[candidate] != nil || fakeAnnotatedTypes.contains(candidate) {
+      if declaredTypes.contains(candidate) || protocols[candidate] != nil || fakeAnnotatedTypes.contains(candidate)
+        || typeAliases[candidate] != nil
+      {
         return candidate
       }
     }
     return nil
+  }
+
+  /// Returns the emitted access prefix after accounting for enclosing type visibility.
+  /// - Parameter name: The qualified declaration name.
+  func accessPrefix(for name: String) -> String {
+    let access = typeAccess[name] ?? .internal
+    return access == .internal ? "" : access.keyword + " "
   }
 
   /// Returns whether the module declares the supplied type name.
@@ -60,6 +71,7 @@ struct ModuleIndex {
     annotatedProtocols.merge(other.annotatedProtocols) { current, _ in current }
     enumDefaults.merge(other.enumDefaults) { current, _ in current }
     typeAccess.merge(other.typeAccess) { current, _ in current }
+    typeAliases.merge(other.typeAliases) { current, _ in current }
     declaredTypes.formUnion(other.declaredTypes)
     genericTypes.formUnion(other.genericTypes)
     fakeAnnotatedTypes.formUnion(other.fakeAnnotatedTypes)

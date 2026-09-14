@@ -1,3 +1,7 @@
+//
+// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+//
+
 import SwiftSyntax
 
 /// Resolves fake construction once, before defaults or source are generated.
@@ -29,7 +33,13 @@ enum FakeDeclarationResolver {
     } else {
       throw GenerationError.message("@PreviewableFake can only be applied to a structure or class")
     }
-    guard annotation.attribute.arguments == nil else {
+    let hasArguments: Bool
+    if case .argumentList(let arguments) = annotation.attribute.arguments {
+      hasArguments = !arguments.isEmpty
+    } else {
+      hasArguments = annotation.attribute.arguments != nil
+    }
+    guard !hasArguments else {
       throw GenerationError.message(
         "@PreviewableFake reads the stored properties of a type declared in this module — remove 'parameters:'"
       )
@@ -53,15 +63,16 @@ enum FakeDeclarationResolver {
       throw GenerationError.message("@PreviewableFake classes require mutable fake properties and an accessible init()")
     }
     let initializerThrows = try PreviewableFakeValidator.validateInitializer(
-      in: members, of: annotation.qualifiedName, isClass: isClass, properties: rawProperties
+      in: members, of: annotation.qualifiedName, isClass: isClass, properties: rawProperties, index: index
     )
     try PreviewableFakeValidator.validateFactoryAccess(
-      of: annotation.qualifiedName, access: AccessLevel(modifiers: modifiers), properties: properties, index: index
+      of: annotation.qualifiedName, access: index.typeAccess[annotation.qualifiedName] ?? .internal,
+      properties: properties, index: index
     )
     let suffix = genericClause.map { "<" + $0.parameters.map(\.name.text).joined(separator: ", ") + ">" } ?? ""
     return ResolvedFake(
       annotation: annotation, typeName: annotation.qualifiedName, returnType: annotation.qualifiedName + suffix,
-      access: modifiers.accessPrefix, properties: properties, genericParameters: generics,
+      access: index.accessPrefix(for: annotation.qualifiedName), properties: properties, genericParameters: generics,
       convenienceInitializer: isClass && !properties.isEmpty, initializerThrows: initializerThrows
     )
   }

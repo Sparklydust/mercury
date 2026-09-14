@@ -25,8 +25,11 @@ enum PreviewableRequirementFlattener {
     var members = declaration.memberBlock.members.map { rewriter.rewrite($0).cast(MemberBlockItemSyntax.self) }
 
     for inherited in declaration.inheritanceClause?.inheritedTypes ?? [] {
-      let name = inherited.type.trimmedDescription
-      if markerProtocols.contains(name) { continue }
+      var type = inherited.type
+      while let attributed = type.as(AttributedTypeSyntax.self) { type = attributed.baseType }
+      let name = type.trimmedDescription
+      let markerName = name.hasPrefix("Swift.") ? String(name.dropFirst("Swift.".count)) : name
+      if markerProtocols.contains(markerName) { continue }
       guard let resolved = index.resolve(name, scope: scope), let base = index.protocols[resolved] else {
         throw GenerationError.message(
           """

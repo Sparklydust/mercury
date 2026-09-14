@@ -5,7 +5,6 @@
 import PreviewableGeneratorCore
 import Testing
 
-@Suite
 struct DefaultValueResolverTests {
 
   private let compositionSource = """

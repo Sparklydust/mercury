@@ -5,7 +5,6 @@
 import Foundation
 import Testing
 
-@Suite
 struct PreviewableFakeBehaviourTests {
 
   @Test

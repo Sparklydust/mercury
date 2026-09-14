@@ -5,7 +5,6 @@
 import PreviewableGeneratorCore
 import Testing
 
-@Suite
 struct PreviewableSourceGeneratorTests {
 
   @Test
@@ -121,5 +120,17 @@ struct PreviewableSourceGeneratorTests {
         == result.components(separatedBy: "#sourceLocation(file:").count,
       "Every remapping must be closed, or it would swallow the declarations that follow it."
     )
+  }
+
+  @Test(
+    arguments: ["private", "fileprivate"],
+    ["@PreviewableFake struct Model { let value: Int }", "@PreviewableDouble protocol Service {}"])
+  func generator_annotationHasInaccessibleAncestor_diagnosticIsEmitted(_ access: String, _ declaration: String) {
+    let source = "\(access) enum Scope { \(declaration) }"
+    let expected = "inside a private or fileprivate type"
+
+    let result = generatorDiagnosticMessage(for: source)
+
+    #expect(result?.contains(expected) == true, "Annotations inside inaccessible ancestors must fail before emission.")
   }
 }

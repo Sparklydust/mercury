@@ -15,26 +15,33 @@ enum PreviewableFakeValidator {
   ///   - typeName: The type name used in diagnostics.
   ///   - isClass: Whether construction requires a parameterless class initializer.
   ///   - properties: The factory inputs in initializer argument order.
+  ///   - index: Module declarations used to resolve equivalent parameter type spellings.
   /// - Returns: Whether the selected initializer throws.
   /// - Throws: `GenerationError` when no usable initializer exists or multiple initializers match.
   static func validateInitializer(
     in members: MemberBlockItemListSyntax,
     of typeName: String,
     isClass: Bool,
-    properties: [StoredProperty]
+    properties: [StoredProperty],
+    index: ModuleIndex
   ) throws -> Bool {
+    let scope = typeName.split(separator: ".").map(String.init)
     let initializers = members.compactMap { $0.decl.as(InitializerDeclSyntax.self) }
-    let candidates = initializers.filter { accepts($0, properties: isClass ? [] : properties) }
+    let candidates = initializers.filter {
+      accepts($0, properties: isClass ? [] : properties, index: index, scope: scope)
+    }
     if !candidates.isEmpty {
       guard candidates.count == 1 else {
         throw GenerationError.message("@PreviewableFake cannot choose between matching initializers of '\(typeName)'")
       }
+      try validateAttributes(of: candidates[0])
       return candidates[0].signature.effectSpecifiers?.throwsClause != nil
     }
     guard isClass else {
+      try validateHiddenProperties(in: members)
       // A structure that declares no initializer keeps its memberwise one, which the factory matches.
       guard !initializers.isEmpty,
-        !initializers.contains(where: { accepts($0, properties: properties) })
+        !initializers.contains(where: { accepts($0, properties: properties, index: index, scope: scope) })
       else { return false }
       let labels = properties.map { "\($0.name):" }.joined()
       throw GenerationError.message(
@@ -45,7 +52,9 @@ enum PreviewableFakeValidator {
       )
     }
     guard initializers.isEmpty else {
-      guard !initializers.contains(where: { accepts($0, properties: []) }) else { return false }
+      guard !initializers.contains(where: { accepts($0, properties: [], index: index, scope: scope) }) else {
+        return false
+      }
       throw GenerationError.message(
         """
         @PreviewableFake cannot construct '\(typeName)': the generated initializer calls 'init()' \
@@ -66,7 +75,12 @@ enum PreviewableFakeValidator {
   }
 
   /// Returns whether an initializer can be called with the supplied property labels in order.
-  private static func accepts(_ initializer: InitializerDeclSyntax, properties: [StoredProperty]) -> Bool {
+  private static func accepts(
+    _ initializer: InitializerDeclSyntax,
+    properties: [StoredProperty],
+    index: ModuleIndex,
+    scope: [String]
+  ) -> Bool {
     guard !initializer.modifiers.isFileScoped, initializer.optionalMark == .none,
       initializer.signature.effectSpecifiers?.asyncSpecifier == nil,
       initializer.genericParameterClause == nil
@@ -75,8 +89,8 @@ enum PreviewableFakeValidator {
     guard parameters.count >= properties.count else { return false }
     for (parameter, property) in zip(parameters, properties) {
       guard parameter.firstName.text == property.name,
-        parameter.type.trimmedDescription.replacingOccurrences(of: "@escaping ", with: "")
-          == property.type.trimmedDescription
+        InitializerTypeResolver.identity(of: parameter.type, index: index, scope: scope)
+          == InitializerTypeResolver.identity(of: property.type, index: index, scope: scope)
       else { return false }
     }
     return parameters.dropFirst(properties.count).allSatisfy { $0.defaultValue != .none }
@@ -101,7 +115,7 @@ enum PreviewableFakeValidator {
   ) throws {
     guard access > .internal else { return }
     for property in properties {
-      for name in property.type.writtenTypeNames {
+      for name in property.type.qualifiedTypeNames {
         guard let declared = index.typeAccess[name], declared < access else { continue }
         throw GenerationError.message(
           """
@@ -109,6 +123,42 @@ enum PreviewableFakeValidator {
           '\(property.name)' parameter uses the \(declared.keyword) type '\(name)' \
           — raise '\(name)' to \(access.keyword)
           """
+        )
+      }
+    }
+  }
+
+  /// Rejects initializer attributes whose isolation or other effects are not represented by the factory.
+  /// - Parameter initializer: The selected accessible initializer.
+  /// - Throws: `GenerationError` when an attribute requires unsupported initializer-specific behavior.
+  private static func validateAttributes(of initializer: InitializerDeclSyntax) throws {
+    let supported: Set<String> = ["available", "inlinable", "usableFromInline", "_transparent", "discardableResult"]
+    for element in initializer.attributes {
+      guard case .attribute(let attribute) = element else { continue }
+      let name = attribute.attributeName.trimmedDescription
+      guard !supported.contains(name) else { continue }
+      throw GenerationError.message(
+        "@PreviewableFake does not support initializer attribute '@\(name)' — declare actor isolation on the type"
+      )
+    }
+  }
+
+  /// Rejects hidden stored inputs when no accessible explicit structure initializer handles them.
+  /// - Parameter members: The declarations directly contained in the structure.
+  /// - Throws: `GenerationError` when the implicit memberwise initializer would require a hidden input.
+  private static func validateHiddenProperties(in members: MemberBlockItemListSyntax) throws {
+    for member in members {
+      guard let variable = member.decl.as(VariableDeclSyntax.self), variable.modifiers.isFileScoped,
+        !variable.modifiers.isStatic
+      else { continue }
+      for binding in variable.bindings {
+        guard PreviewableStoredPropertyCollector.isStored(binding),
+          let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
+          variable.bindingSpecifier.text == "var" || binding.initializer == nil
+        else { continue }
+        throw GenerationError.message(
+          "@PreviewableFake cannot construct this type: private property '\(identifier.identifier.text)' "
+            + "appears in the memberwise initializer — give it a default value or provide an accessible initializer"
         )
       }
     }

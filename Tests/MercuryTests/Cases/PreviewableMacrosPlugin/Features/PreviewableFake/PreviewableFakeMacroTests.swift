@@ -8,7 +8,6 @@ import Testing
 @testable import PreviewableMacrosPlugin
 #endif
 
-@Suite
 struct PreviewableFakeMacroTests {
 
   #if canImport(PreviewableMacrosPlugin)
@@ -164,5 +163,23 @@ struct PreviewableFakeMacroTests {
         macroSpecs: macroSpecs
       )
     }
+
+    @Test(arguments: ["struct", "final class"])
+    func previewableFake_emptyParenthesesAreUsed_expansionIsAccepted(_ kind: String) {
+      let source = """
+        @PreviewableFake()
+        \(kind) Model {
+          var value = 0
+        }
+        """
+      let expected = """
+        \(kind) Model {
+          var value = 0
+        }
+        """
+
+      expectMacroExpansion(source, expandedSource: expected, macroSpecs: macroSpecs)
+    }
+
   #endif
 }

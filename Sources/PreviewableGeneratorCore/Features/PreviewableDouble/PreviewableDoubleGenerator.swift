@@ -78,7 +78,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       throw GenerationError.message(
         "@PreviewableDouble generated type '\(doubleName)' conflicts with an existing declaration")
     }
-    let access = declaration.modifiers.accessPrefix
+    let access = index.accessPrefix(for: qualifiedName)
     var visited: Set<String> = []
     let members = try PreviewableRequirementFlattener.requirements(of: declaration, index: index, visited: &visited)
 

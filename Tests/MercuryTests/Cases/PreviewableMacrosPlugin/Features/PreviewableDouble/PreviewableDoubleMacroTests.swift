@@ -8,7 +8,6 @@ import Testing
 @testable import PreviewableMacrosPlugin
 #endif
 
-@Suite
 struct PreviewableDoubleMacroTests {
 
   #if canImport(PreviewableMacrosPlugin)

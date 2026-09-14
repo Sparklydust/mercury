@@ -167,6 +167,9 @@ Mercury reports unsupported defaults against the annotated declaration. It does 
 
 - Structs need a usable memberwise initializer or an accessible initializer matching their generated fields.
 - Classes need mutable generated fields and an accessible parameterless initializer.
+- Hidden stored properties are allowed when an accessible matching initializer handles them.
+- Initializer-level actor attributes are unsupported; declare actor isolation on the annotated type instead.
+- Nested declarations must have accessible ancestors. Generated access is capped by the enclosing types.
 - Generic fake fields must have constructible defaults, such as `Value?` or `[Value]`. A bare `Value` has no automatic default.
 - Required nested defaults must not form a construction cycle. Optional, collection, and closure defaults can break a cycle.
 - Protocol inheritance must be readable in the same target, apart from supported marker protocols.

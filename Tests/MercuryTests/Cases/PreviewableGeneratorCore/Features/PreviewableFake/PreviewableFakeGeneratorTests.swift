@@ -5,7 +5,6 @@
 import PreviewableGeneratorCore
 import Testing
 
-@Suite
 struct PreviewableFakeGeneratorTests {
 
   private let source = """
@@ -194,5 +193,94 @@ struct PreviewableFakeGeneratorTests {
       !result.contains("@escaping"),
       "`@escaping` applies to function types only, so an optional closure must be left bare."
     )
+  }
+
+  @Test(arguments: ["struct", "final class"])
+  func generator_fakeHasEmptyParentheses_factoryIsGenerated(_ kind: String) throws {
+    let source = "@PreviewableFake() \(kind) Model { var value: Int = 0 }"
+    let expected = "static func fake("
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "Empty parentheses must select the zero-argument fake annotation.")
+  }
+
+  @Test(arguments: [
+    "private var cache = 0",
+    "private let cache: Int",
+  ])
+  func generator_customInitializerHandlesHiddenProperty_factoryIsGenerated(_ hidden: String) throws {
+    let source = """
+      @PreviewableFake
+      struct Model {
+        \(hidden)
+        let name: String
+        init(name: String) { self.cache = 0; self.name = name }
+      }
+      """
+    let expected = "name: name"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "An accessible initializer must be allowed to initialize hidden storage.")
+  }
+
+  @Test(arguments: [
+    "Swift.Int",
+    "Count",
+    "Scope.Count",
+  ])
+  func generator_initializerUsesEquivalentType_factoryIsGenerated(_ parameterType: String) throws {
+    let source = """
+      typealias Count = Swift.Int
+      enum Scope { typealias Count = Swift.Int }
+      @PreviewableFake
+      struct Model {
+        let value: Int
+        init(value: \(parameterType)) { self.value = value }
+      }
+      """
+    let expected = "value: value"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "Equivalent qualified and alias spellings must match the property type.")
+  }
+
+  @Test
+  func generator_initializerAliasHasLexicalScope_factoryIsGenerated() throws {
+    let source = """
+      typealias Count = String
+      enum Scope {
+        typealias Count = Int
+        @PreviewableFake
+        struct Model {
+          let value: Int
+          init(value: Count) { self.value = value }
+        }
+      }
+      """
+    let expected = "extension Scope.Model"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "Initializer aliases must resolve in the enclosing type's scope.")
+  }
+
+  @Test(arguments: ["", "package "])
+  func generator_publicChildHasLessVisibleParent_factoryAccessIsCapped(_ parentAccess: String) throws {
+    let source = """
+      \(parentAccess)enum Scope {
+        @PreviewableFake
+        public struct Model { public let value: Int }
+      }
+      """
+    let expected = "\(parentAccess)static func fake("
+
+    let generated = try PreviewableSourceGenerator.generate(from: [source])
+    let result = generated.components(separatedBy: "\n").first { $0.contains("static func fake(") }?.trimmingCharacters(
+      in: .whitespaces)
+
+    #expect(result == expected, "Factory access must not exceed the enclosing type's visibility.")
   }
 }

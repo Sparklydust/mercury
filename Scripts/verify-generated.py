@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     '-module-cache-path', str(root / 'cache'),
     '-load-plugin-executable', f'{plugin}#PreviewableMacrosPlugin']
 
-  def verify(name, source, main='', release=False, compile_error=None, crashes=False, flags=()):
+  def verify(name, source, main='', release=False, compile_error=None, crashes=False, flags=(), generation_error=None):
     folder = root / name
     folder.mkdir()
     originals = []
@@ -44,7 +44,12 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
       original.write_text('import Mercury\n' + text)
       originals.append(str(original))
     generated = folder / 'Generated.swift'
-    require_success(run([str(generator), str(generated)] + originals), name + ' generation')
+    generation = run([str(generator), str(generated)] + originals)
+    if generation_error:
+      assert generation.returncode != 0 and generation_error in generation.stderr, name + ': ' + generation.stderr
+      print('PASS', name, flush=True)
+      return None
+    require_success(generation, name + ' generation')
     sources = originals + [str(generated)]
     if main:
       entry = folder / 'main.swift'
@@ -66,6 +71,45 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
           require_success(result, name + ' execution')
     print('PASS', name, flush=True)
     return output
+
+  verify('empty-fake-parentheses', '@PreviewableFake() struct Model { let value: Int }',
+    'precondition(Model.fake(value: 42).value == 42)')
+  verify('empty-class-parentheses', '@PreviewableFake() final class Model { var value = 0 }',
+    'precondition(Model.fake(value: 42).value == 42)')
+  for storage in ['private var cache = 0', 'private let cache: Int']:
+    verify('hidden-storage-' + ('var' if 'var' in storage else 'let'),
+      '@PreviewableFake struct Model { ' + storage + '; let name: String; init(name: String) { self.cache = 0; self.name = name } }',
+      'precondition(Model.fake(name: "value").name == "value")')
+  verify('hidden-class-storage',
+    '@PreviewableFake final class Model { private let cache: Int; var value = 0; init() { cache = 1 } }',
+    'precondition(Model.fake(value: 42).value == 42)')
+  for actor in ['MainActor', 'Context']:
+    verify('initializer-actor-' + actor,
+      '@globalActor actor Context { static let shared = Context() }\n@PreviewableFake struct Model { let value: Int; @' + actor + ' init(value: Int) { self.value = value } }',
+      generation_error='does not support initializer attribute')
+  for number, requirement in enumerate(['init() throws', 'init?()', 'init!()', 'init() async throws']):
+    verify('parameterless-' + str(number), '@PreviewableDouble protocol Service { ' + requirement + ' }',
+      'let value = ServiceDouble()\nprecondition(value.calledMethods.isEmpty)')
+  for parameter in ['Swift.Int', 'Count', 'Scope.Count']:
+    verify('equivalent-initializer-' + parameter,
+      'typealias Count = Swift.Int\nenum Scope { typealias Count = Swift.Int }\n@PreviewableFake struct Model { let value: Int; init(value: ' + parameter + ') { self.value = value } }',
+      'precondition(Model.fake(value: 42).value == 42)')
+  for access in ['private', 'fileprivate']:
+    verify('inaccessible-parent-' + access, access + ' enum Scope { @PreviewableFake struct Model { let value: Int } }',
+      generation_error='inside a private or fileprivate type')
+  for release in [False, True]:
+    verify('effective-fake-access-' + str(release),
+      'enum Scope { @PreviewableFake public struct Model { public let value: Int } }', release=release)
+    verify('effective-double-access-' + str(release),
+      'enum Scope { @PreviewableDouble public protocol Service {} }', release=release)
+  verify('qualified-internal-parameter',
+    'public enum Scope { @PreviewableFake struct Helper { let value: Int } }\n@PreviewableFake public struct Model { let value: Scope.Helper }',
+    generation_error="uses the internal type 'Scope.Helper'")
+  verify('qualified-public-parameter',
+    'public enum Scope { @PreviewableFake public struct Helper { public let value: Int } }\n@PreviewableFake public struct Model { let value: Scope.Helper }')
+  for marker in ['Swift.Sendable', 'Swift.AnyObject']:
+    verify('qualified-marker-' + marker, '@PreviewableDouble protocol Service: ' + marker + ' {}',
+      'let value = ServiceDouble()\nprecondition(value.calledMethods.isEmpty)')
 
   verify('scoped-import', 'import struct Foundation.Date\n@PreviewableFake struct Model { let value: Date }')
   verify('conditional-import', '#if canImport(Foundation)\nimport Foundation\n#endif\n@PreviewableFake struct Model { let value: Date }')

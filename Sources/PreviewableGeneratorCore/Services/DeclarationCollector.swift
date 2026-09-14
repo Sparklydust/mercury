@@ -30,6 +30,15 @@ final class DeclarationCollector: SyntaxVisitor {
     return .visitChildren
   }
 
+  override func visit(_ node: TypeAliasDeclSyntax) -> SyntaxVisitorContinueKind {
+    let name = Self.qualifiedName(for: node.name.text, at: Self.lexicalPosition(of: node))
+    index.typeAccess[name] = Self.effectiveAccess(of: node, modifiers: node.modifiers)
+    if node.genericParameterClause == nil {
+      index.typeAliases[name] = node.initializer.value
+    }
+    return .visitChildren
+  }
+
   override func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
     guard let annotated = Self.annotation(in: node.attributes) else { return .visitChildren }
     // The generator never sees the extended type, so its spelling in the extension is the only name there is.
@@ -124,7 +133,7 @@ extension DeclarationCollector {
     let position = Self.lexicalPosition(of: node)
     let keys = Self.keys(for: name, at: position)
     index.declaredTypes.formUnion(keys)
-    let access = AccessLevel(modifiers: modifiers)
+    let access = Self.effectiveAccess(of: node, modifiers: modifiers)
     for key in keys { index.typeAccess[key] = access }
     if isGeneric { index.genericTypes.formUnion(keys) }
     if attributes.contains(where: {
@@ -150,6 +159,7 @@ extension DeclarationCollector {
   ) {
     for key in Self.keys(for: name, at: position) {
       index.protocols[key] = node
+      index.typeAccess[key] = Self.effectiveAccess(of: node, modifiers: node.modifiers)
     }
     guard Self.annotation(in: node.attributes)?.annotation == .double else { return }
     let qualifiedName = Self.qualifiedName(for: name, at: position)
@@ -233,6 +243,9 @@ extension DeclarationCollector {
     var current = node.parent
 
     while let parent = current {
+      if let modifiers = typeModifiers(of: parent), modifiers.isFileScoped {
+        return .unsupported(reason: "inside a private or fileprivate type")
+      }
       if parent.is(ExtensionDeclSyntax.self) {
         return .unsupported(reason: "inside an extension")
       }
@@ -258,5 +271,32 @@ extension DeclarationCollector {
       current = parent.parent
     }
     return .emittable(qualifier: qualifier)
+  }
+
+  /// Returns the narrowest access level among a declaration and its enclosing types.
+  /// - Parameters:
+  ///   - node: The declaration whose parent chain is inspected.
+  ///   - modifiers: The declaration's own access modifiers.
+  private static func effectiveAccess(of node: some SyntaxProtocol, modifiers: DeclModifierListSyntax) -> AccessLevel {
+    var access = AccessLevel(modifiers: modifiers)
+    var current = node.parent
+    while let parent = current {
+      if let modifiers = typeModifiers(of: parent) {
+        access = min(access, AccessLevel(modifiers: modifiers))
+      }
+      current = parent.parent
+    }
+    return access
+  }
+
+  /// Returns access modifiers for a nominal type ancestor.
+  /// - Parameter node: The syntax ancestor to inspect.
+  private static func typeModifiers(of node: Syntax) -> DeclModifierListSyntax? {
+    if let node = node.as(StructDeclSyntax.self) { return node.modifiers }
+    if let node = node.as(ClassDeclSyntax.self) { return node.modifiers }
+    if let node = node.as(EnumDeclSyntax.self) { return node.modifiers }
+    if let node = node.as(ActorDeclSyntax.self) { return node.modifiers }
+    if let node = node.as(ProtocolDeclSyntax.self) { return node.modifiers }
+    return nil
   }
 }

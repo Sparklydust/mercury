@@ -14,9 +14,9 @@ extension TypeSyntax {
   static func parsed(from text: String) -> TypeSyntax? {
     let tree = Parser.parse(source: "var member: \(text)")
     guard !tree.hasError,
-          let variable = tree.statements.first?.item.as(VariableDeclSyntax.self),
-          let type = variable.bindings.first?.typeAnnotation?.type
-            else { return .none }
+      let variable = tree.statements.first?.item.as(VariableDeclSyntax.self),
+      let type = variable.bindings.first?.typeAnnotation?.type
+    else { return .none }
     return type
   }
 
@@ -44,6 +44,24 @@ extension TypeSyntax {
       guard case .identifier(let text) = $0.tokenKind else { return .none }
       return text
     }
+  }
+
+  /// Nominal references preserving qualification and including nested generic arguments.
+  var qualifiedTypeNames: Set<String> {
+    func nominalName(_ type: TypeSyntax) -> String? {
+      if let identifier = type.as(IdentifierTypeSyntax.self) { return identifier.name.text }
+      if let member = type.as(MemberTypeSyntax.self), let base = nominalName(member.baseType) {
+        return base + "." + member.name.text
+      }
+      return nil
+    }
+    func references(in node: Syntax) -> Set<String> {
+      var names: Set<String> = []
+      if let type = node.as(TypeSyntax.self), let name = nominalName(type) { names.insert(name) }
+      for child in node.children(viewMode: .sourceAccurate) { names.formUnion(references(in: child)) }
+      return names
+    }
+    return references(in: Syntax(self))
   }
 
   /// Whether the type refers to the conforming type rather than a named one.

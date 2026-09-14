@@ -4,10 +4,13 @@
 
 import Testing
 
-@Suite
 struct ConcurrentDoubleBehaviourTests {
 
-  private let sut = ConcurrentServiceDouble()
+  private var sut: ConcurrentServiceDouble!
+
+  init() {
+    sut = ConcurrentServiceDouble()
+  }
 
   @Test
   func double_callsAreConcurrent_everyInvocationIsRecorded() async throws {

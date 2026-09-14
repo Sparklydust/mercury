@@ -5,7 +5,6 @@
 import PreviewableGeneratorCore
 import Testing
 
-@Suite
 struct PreviewableDoubleDiagnosticsTests {
 
   @Test(arguments: [

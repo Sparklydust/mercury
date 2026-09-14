@@ -9,11 +9,9 @@ enum PreviewableStoredPropertyCollector {
 
   /// Returns the stored properties a fake factory can set.
   ///
-  /// Private and file-private properties are deliberately excluded — reaching them would defeat the access
-  /// control the developer asked for. They only block generation when they would also appear in the
-  /// memberwise initializer, which the generated extension could then not call.
+  /// Hidden properties are omitted. Initializer validation checks whether construction can initialize them.
   /// - Parameter members: The declarations directly contained in the annotated type.
-  /// - Throws: `GenerationError` for inaccessible initializer inputs or properties without a resolvable type.
+  /// - Throws: `GenerationError` for properties without a resolvable type.
   static func storedProperties(
     in members: MemberBlockItemListSyntax
   ) throws -> [StoredProperty] {
@@ -32,18 +30,8 @@ enum PreviewableStoredPropertyCollector {
         let isMutable = variable.bindingSpecifier.tokenKind == .keyword(.var)
         let hasInitializer = binding.initializer != .none
 
-        if isHidden {
-          guard hasInitializer, !isMutable else {
-            throw GenerationError.message(
-              """
-              @PreviewableFake cannot construct this type: private property \
-              '\(identifier.identifier.text)' appears in the memberwise initializer \
-              — give it a default value or provide an accessible initializer
-              """
-            )
-          }
-          continue
-        }
+        // Initializer validation decides whether omitted hidden properties can be initialized safely.
+        guard !isHidden else { continue }
 
         guard isMutable || !hasInitializer else { continue }
         guard let type = inferredType(from: binding) else {
@@ -109,7 +97,7 @@ enum PreviewableStoredPropertyCollector {
   }
 
   /// Observers belong to stored properties; getters and setters do not.
-  private static func isStored(_ binding: PatternBindingSyntax) -> Bool {
+  static func isStored(_ binding: PatternBindingSyntax) -> Bool {
     guard let block = binding.accessorBlock else { return true }
     guard case .accessors(let accessors) = block.accessors else { return false }
     return accessors.allSatisfy { ["willSet", "didSet"].contains($0.accessorSpecifier.text) }
