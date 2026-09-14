@@ -2,7 +2,8 @@
 
 Mercury generates model fakes and protocol doubles for tests and previews.
 
-**Requirements:** Swift 6.4 or later, iOS 27 or macOS 27.
+**Requirements:** Swift 6.4 or later and an Apple Silicon Mac for builds.
+Deployment targets: iOS 16, macOS 13, tvOS 26, visionOS 26, and watchOS 26 or later.
 
 ## Setup
 
@@ -138,13 +139,13 @@ Consumers do not need to rebuild these binaries.
 Rebuild after changing generator, generator core, macro implementation or launcher sources, `Package.swift`,
 `Package.resolved`, or `Scripts/generator-artifact.py`. README and test-only edits do not require rebuilding.
 
-From the repository root, using macOS with Xcode 27 / Swift 6.4 and Python 3:
+From the repository root, using an Apple Silicon Mac with Xcode 27 / Swift 6.4 and Python 3:
 
 ```sh
 python3 Scripts/generator-artifact.py build --version 1.0.0
 ```
 
-Use the intended release version. The command builds both tools for Apple Silicon and Intel, packages and signs them,
+Use the intended release version. The command builds both tools for Apple Silicon, packages and signs them,
 updates checksums and the macro revision, and verifies the result. Include the following with the source changes:
 
 - `Artifacts/PreviewableGenerator.artifactbundle/` (executables, metadata, and SwiftSyntax license).

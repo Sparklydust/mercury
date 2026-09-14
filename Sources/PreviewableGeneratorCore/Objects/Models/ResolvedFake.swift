@@ -1,3 +1,7 @@
+//
+// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+//
+
 import SwiftSyntax
 
 /// A validated construction recipe shared by dependency analysis and source rendering.

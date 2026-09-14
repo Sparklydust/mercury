@@ -8,8 +8,7 @@
         {
           "path": "bin/PreviewableGenerator",
           "supportedTriples": [
-            "arm64-apple-macosx",
-            "x86_64-apple-macosx"
+            "arm64-apple-macosx"
           ]
         }
       ]

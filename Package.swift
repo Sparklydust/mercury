@@ -29,7 +29,7 @@ let package = Package(
     .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "603.0.0")
   ],
   targets: [
-    // Executable targets allow cross-compiling both host architectures when packaging the macro.
+    // An executable target exposes the macro implementation as a product for packaging.
     buildToolArtifacts ? .executableTarget(
       name: "PreviewableMacrosPlugin",
       dependencies: macroSourceDependencies,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build or verify Mercury's bundled macOS generator and compiler plugin."""
+"""Build or verify Mercury's bundled Apple Silicon generator and compiler plugin."""
 import argparse
 import hashlib
 import json
@@ -34,8 +34,8 @@ def write_json(path, value):
 
 def verify_architectures(executable):
   architectures = subprocess.check_output(['lipo', str(executable), '-archs'], text=True).split()
-  if set(architectures) != {'arm64', 'x86_64'}:
-    raise SystemExit(f'Expected a universal macOS generator; found {architectures}')
+  if architectures != ['arm64']:
+    raise SystemExit(f'Expected an Apple Silicon executable; found {architectures}')
 
 
 def revision_source(checksum):
@@ -61,12 +61,12 @@ def verify():
 def build(scratch, version):
   environment = dict(os.environ, MERCURY_BUILD_GENERATOR_FROM_SOURCE='1', MERCURY_BUILD_TOOL_ARTIFACTS='1')
   command = ['swift', 'build', '--package-path', str(ROOT), '--scratch-path', str(scratch),
-    '--force-resolved-versions', '-c', 'release', '--arch', 'arm64', '--arch', 'x86_64']
+    '--force-resolved-versions', '-c', 'release', '--arch', 'arm64']
   fingerprint = source_digest()
   subprocess.run(command + ['--product', 'PreviewableGenerator'], env=environment, check=True)
   subprocess.run(command + ['--product', 'PreviewableMacrosPlugin'], env=environment, check=True)
   products = Path(subprocess.check_output(command + ['--show-bin-path'], env=environment, text=True).strip())
-  with tempfile.TemporaryDirectory(prefix='mercury-artifact-') as directory:
+  with tempfile.TemporaryDirectory(prefix='.mercury-artifact-', dir=BUNDLE.parent) as directory:
     staging = Path(directory)
     (staging / 'bin').mkdir()
     for relative in [EXECUTABLE, MACROS]:
@@ -83,7 +83,7 @@ def build(scratch, version):
       'artifacts': {'PreviewableGenerator': {
         'version': version, 'type': 'executable',
         'variants': [{'path': str(EXECUTABLE),
-          'supportedTriples': ['arm64-apple-macosx', 'x86_64-apple-macosx']}]
+          'supportedTriples': ['arm64-apple-macosx']}]
       }}
     })
     if fingerprint != source_digest():
@@ -95,6 +95,10 @@ def build(scratch, version):
     })
     if (BUNDLE / license_path).exists():
       (BUNDLE / license_path).chmod(0o644)
+    # Replace signed executables atomically so macOS does not reuse the old file's cached signature.
+    (BUNDLE / 'bin').mkdir(parents=True, exist_ok=True)
+    for relative in [EXECUTABLE, MACROS]:
+      (staging / relative).replace(BUNDLE / relative)
     shutil.copytree(staging, BUNDLE, dirs_exist_ok=True)
     REVISION.write_text(revision_source(digest(BUNDLE / MACROS)))
   verify()
