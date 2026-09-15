@@ -131,7 +131,8 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
       if main:
         result = run([str(output)])
         if crashes:
-          assert result.returncode != 0 and 'Missing Previewable response' in result.stderr, name + ': ' + result.stderr
+          expected = crashes if isinstance(crashes, str) else 'Missing Previewable response'
+          assert result.returncode != 0 and expected in result.stderr, name + ': ' + result.stderr
         else:
           require_success(result, name + ' execution')
     print('PASS', name, flush=True)
@@ -219,6 +220,76 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     '  @globalActor actor Context { static let shared = Context() }\n'
     '  protocol Base { @Context func store(_ value: Payload) }\n'
     '}\n@PreviewableDouble protocol ServiceProtocol: Scope.Base {}')
+
+  associated = ('@PreviewableDouble protocol ServiceProtocol<Value>: Sendable { '
+    'associatedtype Value: Sendable; func load() -> Value; static func fetch() -> Value }')
+  verify('associated-explicit-nil', associated,
+    'let double = ServiceDouble<String?>(); double.loadStub = nil; precondition(double.load() == nil)')
+  verify('missing-associated-response', associated, 'let _ = ServiceDouble<String>().load()', crashes=True)
+  verify('associated-release', associated, release=True)
+  verify('primary-associated-type-injection', associated,
+    'let double = ServiceDouble<String>(); double.loadStub = "ready"; '
+    'let service: any ServiceProtocol<String> = double; precondition(service.load() == "ready")')
+  static = '@PreviewableDouble protocol ServiceProtocol: Sendable { static func load() -> Int }'
+  verify('static-missing-scope', static, 'let _ = ServiceDouble.load()', crashes='Missing Previewable static scope')
+  verify('static-scope-ends', static,
+    'ServiceDouble.withStaticStubs { ServiceDouble.loadStub = 42 }; let _ = ServiceDouble.load()',
+    crashes='Missing Previewable static scope')
+  verify('static-detached-needs-scope', static,
+    'await ServiceDouble.withStaticStubs { await Task.detached { ServiceDouble.load() }.value }',
+    crashes='Missing Previewable static scope')
+  verify('static-detached-explicit-scope', static,
+    'let value = await Task.detached { ServiceDouble.withStaticStubs { '
+    'ServiceDouble.loadStub = 42; return ServiceDouble.load() } }.value; precondition(value == 42)')
+  verify('static-actor-associated-payload',
+    'final class Payload {}\n@MainActor @PreviewableDouble protocol ServiceProtocol<Value> { '
+    'associatedtype Value; static func store(_ value: Value) -> Value? }',
+    '@MainActor func check() async { await ServiceDouble<Payload>.withStaticStubs { '
+    'let payload = Payload(); ServiceDouble<Payload>.storeStub = payload; await Task.yield(); '
+    'precondition(ServiceDouble<Payload>.store(payload) === payload) } }; await check()')
+  for actor in ['MainActor', 'Context']:
+    source = ('@globalActor actor Context { static let shared = Context() }\nfinal class Payload {}\n'
+      '@PreviewableDouble protocol ServiceProtocol { @' + actor + ' static func load() -> Payload? }')
+    verify('static-member-actor-' + actor, source)
+    verify('static-stub-isolation-' + actor, source,
+      'nonisolated func configure() { ServiceDouble.loadStub = Payload() }', compile_error='isolated static property')
+  verify('static-non-sendable-argument',
+    'final class Payload {}\n@PreviewableDouble protocol ServiceProtocol { static func store(_ value: Payload) }',
+    compile_error='Sendable')
+  verify('static-instance-same-name',
+    '@PreviewableDouble protocol ServiceProtocol { static func load() -> Int; func load() -> Int }',
+    'ServiceDouble.withStaticStubs { let double = ServiceDouble(); double.loadStub = 1; '
+    'ServiceDouble.loadStub = 2; precondition(double.load() == 1 && ServiceDouble.load() == 2) }')
+  verify('subscript-closure-index',
+    '@PreviewableDouble protocol ServiceProtocol { subscript(_ predicate: () -> Bool) -> Int { get } }',
+    'let double = ServiceDouble(); double.subscriptStub = 42; precondition(double[{ true }] == 42)')
+  verify('subscript-setter-index-shadowing',
+    '@PreviewableDouble protocol ServiceProtocol { subscript(_ newValue: Int) -> String { get set } }',
+    'let double = ServiceDouble(); double.subscriptStub = "ready"; double[42] = "write"; '
+    'precondition(double[42] == "ready")')
+  verify('subscript-typed-throws',
+    'enum Failure: Error { case failed }\n@PreviewableDouble protocol ServiceProtocol { '
+    'subscript(_ index: Int) -> Int { get throws(Failure) } }',
+    'let double = ServiceDouble(); double.subscriptErrorsStub = [Failure.failed]; '
+    'do { let _ = try double[1]; fatalError("expected error") } catch Failure.failed {}')
+  verify('overload-readable-name-collision',
+    '@PreviewableDouble protocol ServiceProtocol { '
+    'func load(_ value: Int) -> Int; func load(_ value: String) -> Int; func loadInt() -> Int }')
+  verify('generic-subscript-shadowing',
+    'enum Scope { struct Value {}\n@PreviewableDouble protocol ServiceProtocol { '
+    'subscript<Value: Sendable>(_ type: Value.Type) -> Value { get } } }',
+    'let double = ServiceDouble(); double.subscriptStub.set(42, for: Int.self); precondition(double[Int.self] == 42)')
+  verify('associated-constraint-local-alias',
+    'enum Scope { typealias Output = String; @PreviewableDouble protocol ServiceProtocol where Value == Output { '
+    'associatedtype Value; func load() -> Value } }',
+    'let double = ServiceDouble(); double.loadStub = "ready"; precondition(double.load() == "ready")')
+  verify('associated-self-qualified-type',
+    '@PreviewableDouble protocol ServiceProtocol<Value>: Sendable { '
+    'associatedtype Value: Sendable; func load() -> Self.Value }',
+    'let double = ServiceDouble<String>(); double.loadStub = "ready"; precondition(double.load() == "ready")')
+  verify('inherited-equivalent-actor-isolation',
+    '@MainActor protocol Base { func load() -> Int }\n'
+    '@PreviewableDouble protocol ServiceProtocol: Base { @MainActor func load() -> Swift.Int }')
 
   verify('empty-fake-parentheses', '@PreviewableFake() struct Model { let value: Int }',
     'precondition(Model.fake(value: 42).value == 42)')

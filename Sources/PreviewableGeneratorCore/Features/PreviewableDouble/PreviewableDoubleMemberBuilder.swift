@@ -22,15 +22,9 @@ enum PreviewableDoubleMemberBuilder {
     isolated: Bool,
     resolver: inout DefaultValueResolver
   ) throws -> [GeneratedProperty] {
-    guard !declaration.modifiers.isStatic else {
-      throw GenerationError.message(
-        "@PreviewableDouble does not support static property requirements"
-      )
-    }
-
     let isolation = DoubleStorageBuilder.isolationAttributes(in: declaration.attributes, index: resolver.index)
     let nonisolated = declaration.modifiers.contains { $0.name.text == "nonisolated" }
-    let modifier = nonisolated ? "nonisolated " : ""
+    let modifier = (nonisolated ? "nonisolated " : "") + (declaration.modifiers.isStatic ? "static " : "")
     let memberIsolated = !nonisolated && (isolated || !isolation.isEmpty)
     let attributes = declaration.attributes.isEmpty ? "" : declaration.attributes.trimmedDescription + "\n"
     var properties: [GeneratedProperty] = []
@@ -53,10 +47,11 @@ enum PreviewableDoubleMemberBuilder {
       }
       let printedType = type.trimmedDescription
       resolver.fieldName = name
-      let defaultValue = try resolver.defaultValue(for: type)
+      let defaultValue = try configuredDefault(for: type, resolver: &resolver)
       let stub = DoubleStorageBuilder.property(
         name: name + "Stub", type: printedType, value: defaultValue, access: access,
-        isolated: memberIsolated, isolation: isolation, nonisolated: nonisolated
+        isolated: memberIsolated, documentation: "The configured property value; assignments update this stub.",
+        isolation: isolation, nonisolated: nonisolated
       )
 
       if accessorBlock.isSettable {
@@ -92,23 +87,26 @@ enum PreviewableDoubleMemberBuilder {
   ///   - access: The access modifier prefix for generated members.
   ///   - isolated: Whether recorded values may rely on global-actor isolation.
   ///   - resolver: The state used to construct nongeneric return defaults.
+  ///   - stubName: The allocated storage stem, or `nil` to use the method name.
+  ///   - recordingKey: The canonical overload identity, or `nil` to use Swift's function name.
+  ///   - responseExpression: A typed subscript resolver call, when generating an accessor.
   /// - Throws: `GenerationError` for unsupported signatures or unavailable defaults.
   static func methodDeclaration(
     from function: FunctionDeclSyntax,
     access: String,
     isolated: Bool,
-    resolver: inout DefaultValueResolver
+    resolver: inout DefaultValueResolver,
+    stubName: String? = nil,
+    recordingKey: String? = nil,
+    responseExpression: String? = nil
   ) throws -> GeneratedMethod {
-    guard !function.modifiers.isStatic else {
-      throw GenerationError.message(
-        "@PreviewableDouble does not support static method requirements"
-      )
-    }
-
     let methodName = function.name.text
+    let stub = stubName ?? methodName
+    let receiver = function.modifiers.isStatic ? "_previewableStaticState" : "self"
+    let key = recordingKey.map(String.init(reflecting:)) ?? "#function"
     let isolation = DoubleStorageBuilder.isolationAttributes(in: function.attributes, index: resolver.index)
     let nonisolated = function.modifiers.contains { $0.name.text == "nonisolated" }
-    let modifier = nonisolated ? "nonisolated " : ""
+    let modifier = (nonisolated ? "nonisolated " : "") + (function.modifiers.isStatic ? "static " : "")
     let memberIsolated = !nonisolated && (isolated || !isolation.isEmpty)
     let isGeneric = function.genericParameterClause != nil
     resolver.fieldName = methodName
@@ -147,14 +145,17 @@ enum PreviewableDoubleMemberBuilder {
       }
       declarations.append(
         DoubleStorageBuilder.property(
-          name: methodName + "ErrorStub", type: "(\(thrownType))?", value: ".none", access: access,
-          isolated: memberIsolated, isolation: isolation, nonisolated: nonisolated
+          name: stub + "ErrorStub", type: "(\(thrownType))?", value: ".none", access: access,
+          isolated: memberIsolated, documentation: "The persistent error thrown after queued errors are consumed.",
+          isolation: isolation, nonisolated: nonisolated
         ))
       // A retrying caller needs a different outcome per call, which one stored error cannot express.
       declarations.append(
         DoubleStorageBuilder.property(
-          name: methodName + "ErrorsStub", type: "[\(thrownType)]", value: "[]", access: access,
-          isolated: memberIsolated, isolation: isolation, nonisolated: nonisolated
+          name: stub + "ErrorsStub", type: "[\(thrownType)]", value: "[]", access: access,
+          isolated: memberIsolated,
+          documentation: "Errors consumed atomically in FIFO order; concurrent callers are ordered by scheduling.",
+          isolation: isolation, nonisolated: nonisolated
         ))
     }
 
@@ -163,42 +164,52 @@ enum PreviewableDoubleMemberBuilder {
     if let returnType, returnsValue {
       if isGeneric {
         try GenericResponseValidator.validate(function, index: resolver.index)
-        declarations.append("\(isolation)\(access)\(modifier)let \(methodName)Stub = PreviewableResponses()")
+        declarations.append(
+          """
+          /// Responses keyed by concrete return type; configure each type before calling the requirement.
+          \(isolation)\(access)\(nonisolated ? "nonisolated " : "")let \(stub)Stub = PreviewableResponses()
+          """)
       } else {
+        let defaultValue = try configuredDefault(for: returnType, resolver: &resolver)
         declarations.append(
           DoubleStorageBuilder.property(
-            name: methodName + "Stub", type: returnType.trimmedDescription,
-            value: try resolver.defaultValue(for: returnType), access: access,
-            isolated: memberIsolated, isolation: isolation, nonisolated: nonisolated
+            name: stub + "Stub", type: returnType.trimmedDescription,
+            value: defaultValue, access: access, isolated: memberIsolated,
+            documentation: defaultValue == nil
+              ? "The response to configure before use. For optional responses, an explicit nil counts as configured."
+              : "The response returned by this requirement after any configured errors are consumed.",
+            isolation: isolation, nonisolated: nonisolated
           ))
       }
     }
 
     let recording = DoubleStorageBuilder.recordingName(for: isolation)
     var body = [
-      "self._previewable_calledMethods.append(#function)",
-      "self._previewable_\(recording)[#function, default: []].append([\(parameters.joined(separator: ", "))])",
+      "\(receiver)._previewable_calledMethods.append(\(key))",
+      "\(receiver)._previewable_\(recording)[\(key), default: []].append([\(parameters.joined(separator: ", "))])",
     ]
     if !memberIsolated {
       body.insert(contentsOf: parameters.map { "Mercury.previewableRequireSendable(\($0))" }, at: 0)
     }
     if isThrowing {
       // The queue is consumed first, so a test can fail the first calls and let a later one succeed.
-      body.append("if !self.\(methodName)ErrorsStub.isEmpty { throw self.\(methodName)ErrorsStub.removeFirst() }")
-      body.append("if let \(methodName)ErrorStub = self.\(methodName)ErrorStub { throw \(methodName)ErrorStub }")
+      body.append("if !self.\(stub)ErrorsStub.isEmpty { throw self.\(stub)ErrorsStub.removeFirst() }")
+      body.append("if let error = self.\(stub)ErrorStub { throw error }")
     }
     if returnsValue {
       if isGeneric, let returnType {
-        body.append("return self.\(methodName)Stub.require((\(returnType.trimmedDescription)).self, method: #function)")
+        let response = "self.\(stub)Stub.require((\(returnType.trimmedDescription)).self, method: \(key))"
+        body.append("return " + (responseExpression ?? response))
       } else {
-        body.append("return self.\(methodName)Stub")
+        body.append("return " + (responseExpression ?? "self.\(stub)Stub"))
       }
     }
     let effects = isThrowing ? " " + (throwsClause?.trimmedDescription ?? "throws") : ""
     let output = returnType?.trimmedDescription ?? "Void"
     let closureSignature = "()\(effects) -> \(output) in"
     let call =
-      "\(returnsValue ? "return " : "")\(isThrowing ? "try " : "")Mercury.previewableWithLock(self._previewableLock) { \(closureSignature)"
+      "\(returnsValue ? "return " : "")\(isThrowing ? "try " : "")"
+      + "Mercury.previewableWithLock(\(receiver)._previewableLock) { \(closureSignature)"
     let methodBody = ([call] + body.map { "  " + $0 } + ["}"]).joined(separator: "\n").indented(by: 2)
     let signature = function.signature.generatedDescription
     let generics = function.genericParameterClause?.trimmedDescription ?? ""
@@ -211,6 +222,24 @@ enum PreviewableDoubleMemberBuilder {
       """
 
     return GeneratedMethod(stubs: declarations, requirement: requirement)
+  }
+
+  /// Leaves associated-type responses unconfigured when no constructible default exists.
+  /// - Parameters:
+  ///   - type: The response's rewritten type.
+  ///   - resolver: Default construction and the generated generic parameter names.
+  /// - Throws: When an unsupported nongeneric type has no default.
+  private static func configuredDefault(for type: TypeSyntax, resolver: inout DefaultValueResolver) throws -> String? {
+    do { return try resolver.defaultValue(for: type) } catch let originalError {
+      let canonicalizer = DoubleTypeCanonicalizer(
+        index: resolver.index, scope: [],
+        substitutions: Dictionary(uniqueKeysWithValues: resolver.genericParameters.map { ($0, $0) }))
+      let resolved = try canonicalizer.resolved(type)
+      do { return try resolver.defaultValue(for: resolved) } catch {
+        guard !resolver.genericParameters.isDisjoint(with: resolved.writtenTypeNames) else { throw originalError }
+        return nil
+      }
+    }
   }
 
   /// Returns the witness for an initializer requirement, or `nil` when the double's own `init()` already covers it.
@@ -247,7 +276,8 @@ enum PreviewableDoubleMemberBuilder {
     let isolation = DoubleStorageBuilder.isolationAttributes(in: initializer.attributes, index: index)
     let nonisolated = initializer.modifiers.contains { $0.name.text == "nonisolated" }
     let modifier = nonisolated ? "nonisolated " : ""
-    let checks = !nonisolated && (isolated || !isolation.isEmpty)
+    let checks =
+      !nonisolated && (isolated || !isolation.isEmpty)
       ? "" : recorded.map { "Mercury.previewableRequireSendable(\($0))" }.joined(separator: "\n")
     let recording = DoubleStorageBuilder.recordingName(for: isolation)
     let attributes = initializer.attributes.isEmpty ? "" : initializer.attributes.trimmedDescription + "\n"

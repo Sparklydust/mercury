@@ -60,14 +60,6 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     index: ModuleIndex,
     resolver: inout DefaultValueResolver
   ) throws -> GeneratedDouble {
-    guard declaration.primaryAssociatedTypeClause == .none,
-      declaration.genericWhereClause == .none
-    else {
-      throw GenerationError.message(
-        "@PreviewableDouble does not support protocols with associated types or generic constraints"
-      )
-    }
-
     guard !declaration.modifiers.isFileScoped else {
       throw GenerationError.message("@PreviewableDouble cannot access a private or fileprivate protocol")
     }
@@ -80,12 +72,28 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     }
     let access = index.accessPrefix(for: qualifiedName)
     var visited: Set<String> = []
-    let members = try PreviewableRequirementFlattener.requirements(of: declaration, index: index, visited: &visited)
+    let originalMembers = try PreviewableRequirementFlattener.requirements(
+      of: declaration, index: index, visited: &visited)
+    let associated = try DoubleAssociatedTypes(
+      declaration: declaration, members: originalMembers, index: index,
+      isolated: isolated)
+    let rewriter = DoubleTypeSubstitution(associated.bindings)
+    let members = originalMembers.filter { !$0.decl.is(AssociatedTypeDeclSyntax.self) }
+      .map { rewriter.rewrite($0).cast(MemberBlockItemSyntax.self) }
+    resolver.genericParameters = Set(associated.parameters)
+    defer { resolver.genericParameters = [] }
+    let requirements = try DoubleRequirement.collect(
+      members, index: index,
+      scope: qualifiedName.split(separator: ".").map(String.init),
+      defaultIsolation: protocolIsolation(declaration, index: index))
 
     var recordings: [String: String] = [:]
     for member in members {
-      let attributes = member.decl.as(FunctionDeclSyntax.self)?.attributes
+      let attributes =
+        member.decl.as(FunctionDeclSyntax.self)?.attributes
         ?? member.decl.as(InitializerDeclSyntax.self)?.attributes
+        ?? member.decl.as(SubscriptDeclSyntax.self)?.attributes
+        ?? member.decl.as(VariableDeclSyntax.self)?.attributes
       guard let attributes else { continue }
       let isolation = DoubleStorageBuilder.isolationAttributes(in: attributes, index: index)
       guard !isolation.isEmpty else { continue }
@@ -95,46 +103,49 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       }
       recordings[name] = isolation
     }
-    try validateNames(in: members, recordings: Set(recordings.keys))
+    try validateNames(in: requirements, recordings: Set(recordings.keys))
     var stubDeclarations: [String] = []
+    var staticStubs: [String] = []
     var requirementDeclarations: [String] = []
-    var methodSignatures: [String: String] = [:]
     var propertyNames: Set<String> = []
+    var staticPropertyNames: Set<String> = []
 
-    for member in members {
+    for requirement in requirements {
+      let member = requirement.declaration
       if let variable = member.decl.as(VariableDeclSyntax.self) {
-        for property in try PreviewableDoubleMemberBuilder.propertyDeclarations(
+        var names = requirement.isStatic ? staticPropertyNames : propertyNames
+        let properties = try PreviewableDoubleMemberBuilder.propertyDeclarations(
           from: variable,
           access: access,
-          seen: &propertyNames,
+          seen: &names,
           isolated: isolated,
           resolver: &resolver
-        ) {
-          stubDeclarations.append(property.stub)
+        )
+        if requirement.isStatic { staticPropertyNames = names } else { propertyNames = names }
+        for property in properties {
+          if requirement.isStatic { staticStubs.append(property.stub) } else { stubDeclarations.append(property.stub) }
           requirementDeclarations.append(property.requirement)
         }
         continue
       }
-      if let function = member.decl.as(FunctionDeclSyntax.self) {
-        let name = function.name.text
-        let signature =
-          (function.genericParameterClause?.trimmedDescription ?? "")
-          + function.signature.trimmedDescription + (function.genericWhereClause?.trimmedDescription ?? "")
-        if let inherited = methodSignatures[name] {
-          // A refinement may restate a requirement it inherits; only distinct shapes are ambiguous.
-          guard inherited != signature else { continue }
-          throw GenerationError.message(
-            "@PreviewableDouble does not support overloaded requirement '\(name)'"
-          )
-        }
-        methodSignatures[name] = signature
+      if requirement.subscriptDeclaration != nil {
+        let generated = try DoubleSubscriptBuilder.generate(
+          requirement, access: access, isolated: isolated,
+          resolver: &resolver)
+        if requirement.isStatic { staticStubs += generated.stubs } else { stubDeclarations += generated.stubs }
+        requirementDeclarations.append(generated.requirement)
+        continue
+      }
+      if let function = requirement.function {
         let method = try PreviewableDoubleMemberBuilder.methodDeclaration(
           from: function,
           access: access,
           isolated: isolated,
-          resolver: &resolver
+          resolver: &resolver,
+          stubName: requirement.stubName,
+          recordingKey: requirement.recordingKey
         )
-        stubDeclarations.append(contentsOf: method.stubs)
+        if requirement.isStatic { staticStubs += method.stubs } else { stubDeclarations += method.stubs }
         requirementDeclarations.append(method.requirement)
         continue
       }
@@ -146,16 +157,15 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
         }
         continue
       }
-      if member.decl.is(AssociatedTypeDeclSyntax.self)
-        || member.decl.is(SubscriptDeclSyntax.self)
-      {
-        throw GenerationError.message(
-          "@PreviewableDouble does not support associated types or subscripts"
-        )
-      }
     }
 
     var sections: [String] = ["nonisolated private let _previewableLock = NSRecursiveLock()"]
+    if !associated.bindings.isEmpty { sections.append(associated.aliases(access: access)) }
+    if requirements.contains(where: \.isStatic) {
+      sections += DoubleStaticBuilder.declarations(
+        stubs: staticStubs, recordings: recordings, access: access,
+        isolation: protocolIsolation(declaration, index: index))
+    }
     if !stubDeclarations.isEmpty {
       sections.append(
         (["// Mock values"] + stubDeclarations).joined(separator: "\n")
@@ -164,12 +174,17 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     sections.append(
       [
         "// Preview value",
-        "/// The shared double used by previews.",
+        associated.parameters.isEmpty
+          ? "/// The shared double used by previews."
+          : "/// A fresh specialized double for each preview access.",
         "///",
-        "/// Instantiated once as a dummy, but can act as a mock or spy",
-        "/// depending on the configured stubs and tracked calls when used.",
+        associated.parameters.isEmpty
+          ? "/// Instantiated once; configured stubs and recorded calls persist between accesses."
+          : "/// Configure associated responses without defaults before invoking their requirements.",
         "/// - Important: Use this value only from SwiftUI previews.",
-        "\(access)nonisolated static let preview = \(doubleName)()",
+        associated.parameters.isEmpty
+          ? "\(access)nonisolated static let preview = \(doubleName)()"
+          : "\(access)nonisolated static var preview: \(doubleName) { \(doubleName)() }",
       ].joined(separator: "\n")
     )
     sections.append("\(access)nonisolated init() {}")
@@ -185,7 +200,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
           isolated: true,
           documentation: "The arguments recorded in the protocol's isolation, grouped by method.",
           sharedBacking: true
-        )
+        ),
       ].joined(separator: "\n")
     )
     for name in recordings.keys.sorted() {
@@ -205,12 +220,15 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     }
 
     let body = sections.map { $0.indented(by: 2) }.joined(separator: "\n\n")
+    let classSignature =
+      "\(access)final class \(doubleName)\(associated.genericClause): "
+      + "\(qualifiedName), @unchecked Sendable\(associated.whereClause)"
     let generatedDeclaration = """
       /// A test double for `\(protocolName)`.
       ///
       /// Configure stubs and inspect recorded calls when testing protocol consumers.
       /// - Important: Available only in Debug builds.
-      \(access)final class \(doubleName): \(qualifiedName), @unchecked Sendable {
+      \(classSignature) {
 
       \(body)
       }
@@ -238,7 +256,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       """
     return GeneratedDouble(
       declaration: generatedDeclaration,
-      previewConfiguration: previewConfiguration
+      previewConfiguration: associated.parameters.isEmpty ? previewConfiguration : ""
     )
   }
   /// Rejects requirement names that collide with generated storage, stubs, or recording members.
@@ -246,12 +264,14 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
   ///   - members: The flattened protocol requirements.
   ///   - recordings: Names reserved for actor-isolated argument dictionaries.
   /// - Throws: `GenerationError` when a requirement uses a reserved or generated name.
-  private static func validateNames(in members: [MemberBlockItemSyntax], recordings: Set<String>) throws {
-    let reserved: Set<String> = Set(["preview", "calledMethods", "passedParameters"]).union(recordings)
+  private static func validateNames(in members: [DoubleRequirement], recordings: Set<String>) throws {
+    let reserved: Set<String> = Set(["preview", "calledMethods", "passedParameters", "withStaticStubs"]).union(
+      recordings)
     var generated = reserved
     var requirements: Set<String> = []
     var stubs: Set<String> = []
-    for member in members {
+    for requirement in members {
+      let member = requirement.declaration
       if let variable = member.decl.as(VariableDeclSyntax.self) {
         for binding in variable.bindings {
           guard let pattern = binding.pattern.as(IdentifierPatternSyntax.self) else { continue }
@@ -259,14 +279,14 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
           requirements.insert(name)
           stubs.insert(name + "Stub")
         }
-      } else if let function = member.decl.as(FunctionDeclSyntax.self) {
-        let name = function.name.text
+      } else if let function = requirement.function {
+        let name = requirement.name
         requirements.insert(name)
         if let output = function.signature.returnClause?.type, !DefaultValueResolver.isVoid(output) {
-          stubs.insert(name + "Stub")
+          stubs.insert(requirement.stubName + "Stub")
         }
         if let clause = function.signature.effectSpecifiers?.throwsClause, clause.throwsSpecifier.text != "rethrows" {
-          stubs.formUnion([name + "ErrorStub", name + "ErrorsStub"])
+          stubs.formUnion([requirement.stubName + "ErrorStub", requirement.stubName + "ErrorsStub"])
         }
       }
     }
@@ -277,6 +297,24 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     if let collision = requirements.sorted().first(where: { generated.contains($0) || $0.hasPrefix("_previewable") }) {
       throw GenerationError.message("@PreviewableDouble requirement '\(collision)' conflicts with a generated member")
     }
+  }
+
+  /// Finds the protocol's declared or inherited global actor for its scoped static state.
+  private static func protocolIsolation(
+    _ declaration: ProtocolDeclSyntax, index: ModuleIndex, visited: Set<String> = []
+  ) -> String {
+    let name = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
+    guard !visited.contains(name) else { return "" }
+    let scope = name.split(separator: ".").map(String.init)
+    let own = DoubleStorageBuilder.isolationAttributes(in: declaration.attributes, index: index, scope: scope)
+    if !own.isEmpty { return own }
+    for inherited in declaration.inheritanceClause?.inheritedTypes ?? [] {
+      if let key = index.resolve(inherited.type.trimmedDescription, scope: scope), let base = index.protocols[key] {
+        let isolation = protocolIsolation(base, index: index, visited: visited.union([name]))
+        if !isolation.isEmpty { return isolation }
+      }
+    }
+    return ""
   }
 
 }

@@ -6,6 +6,7 @@ import SwiftSyntax
 
 /// Qualifies local type references before declarations move into a generated file.
 final class TypeNameResolver: SyntaxRewriter {
+
   private let index: ModuleIndex
   private let scope: [String]
   private let genericParameters: Set<String>
@@ -43,6 +44,24 @@ final class TypeNameResolver: SyntaxRewriter {
       result.genericParameterClause = local.rewrite(generics).cast(GenericParameterClauseSyntax.self)
     }
     result.signature = local.rewrite(node.signature).cast(FunctionSignatureSyntax.self)
+    if let constraints = node.genericWhereClause {
+      result.genericWhereClause = local.rewrite(constraints).cast(GenericWhereClauseSyntax.self)
+    }
+    return DeclSyntax(result)
+  }
+
+  /// Keeps subscript generic parameters local when qualifying index and response types.
+  override func visit(_ node: SubscriptDeclSyntax) -> DeclSyntax {
+    let local = TypeNameResolver(
+      index: index, scope: scope,
+      genericParameters: genericParameters.union(node.genericParameterClause?.parameters.map(\.name.text) ?? []))
+    var result = node
+    result.attributes = local.rewrite(node.attributes).cast(AttributeListSyntax.self)
+    if let generics = node.genericParameterClause {
+      result.genericParameterClause = local.rewrite(generics).cast(GenericParameterClauseSyntax.self)
+    }
+    result.parameterClause = local.rewrite(node.parameterClause).cast(FunctionParameterClauseSyntax.self)
+    result.returnClause = local.rewrite(node.returnClause).cast(ReturnClauseSyntax.self)
     if let constraints = node.genericWhereClause {
       result.genericWhereClause = local.rewrite(constraints).cast(GenericWhereClauseSyntax.self)
     }

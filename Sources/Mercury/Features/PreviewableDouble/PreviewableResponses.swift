@@ -7,7 +7,9 @@ import Foundation
 /// Stores independently configured generic responses by their concrete return type.
 ///
 /// Concurrent reads and updates are synchronized. An optional `nil` is a configured response, not removal.
+/// Concurrent configuration order is unspecified. Configure before spawning child tasks for deterministic responses.
 public final class PreviewableResponses: @unchecked Sendable {
+
   private let lock = NSLock()
   private var values: [ObjectIdentifier: any Sendable] = [:]
 

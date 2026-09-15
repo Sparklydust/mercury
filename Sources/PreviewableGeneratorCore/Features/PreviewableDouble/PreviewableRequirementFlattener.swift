@@ -21,7 +21,8 @@ enum PreviewableRequirementFlattener {
     let qualified = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
     guard visited.insert(qualified).inserted else { return [] }
     let scope = qualified.split(separator: ".").map(String.init)
-    let rewriter = TypeNameResolver(index: index, scope: scope)
+    let associatedNames = associatedNames(in: declaration, index: index)
+    let rewriter = TypeNameResolver(index: index, scope: scope, genericParameters: associatedNames)
     var members = declaration.memberBlock.members.map { rewriter.rewrite($0).cast(MemberBlockItemSyntax.self) }
 
     for inherited in declaration.inheritanceClause?.inheritedTypes ?? [] {
@@ -43,6 +44,26 @@ enum PreviewableRequirementFlattener {
       )
     }
     return members
+  }
+
+  /// Collects only associated names visible through this protocol's local inheritance graph.
+  private static func associatedNames(
+    in declaration: ProtocolDeclSyntax, index: ModuleIndex, visited: Set<String> = []
+  ) -> Set<String> {
+    let name = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
+    guard !visited.contains(name) else { return [] }
+    var names = Set(
+      declaration.memberBlock.members.compactMap {
+        $0.decl.as(AssociatedTypeDeclSyntax.self)?.name.text
+      })
+    for inherited in declaration.inheritanceClause?.inheritedTypes ?? [] {
+      if let key = index.resolve(inherited.type.trimmedDescription, scope: name.split(separator: ".").map(String.init)),
+        let base = index.protocols[key]
+      {
+        names.formUnion(associatedNames(in: base, index: index, visited: visited.union([name])))
+      }
+    }
+    return names
   }
 
   /// Protocols that add no requirement of their own, so a double need not read them.

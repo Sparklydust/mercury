@@ -63,46 +63,25 @@ struct PreviewableDoubleDiagnosticsTests {
       "does not support 'Self' in requirement 'twin'"
     ),
     (
-      """
-      @PreviewableDouble
-      protocol ServiceProtocol { func load(); func load(id: Int) }
-      """,
-      "does not support overloaded requirement 'load'"
+      "@PreviewableDouble protocol Service<Item> { var name: String { get } }",
+      "primary associated types must have associatedtype declarations"
     ),
     (
-      """
-      @PreviewableDouble
-      protocol ServiceProtocol { associatedtype Item; func load() -> Item }
-      """,
-      "does not support associated types or subscripts"
+      "typealias A = B\ntypealias B = A\n@PreviewableDouble protocol Service { func load(_ value: A) }",
+      "cyclic type alias"
     ),
     (
-      """
-      @PreviewableDouble
-      protocol ServiceProtocol { subscript(index: Int) -> String { get } }
-      """,
-      "does not support associated types or subscripts"
+      "protocol Base { var value: Int { get } }\n"
+        + "@PreviewableDouble protocol Service: Base { var value: String { get } }",
+      "property 'value' has incompatible requirements"
     ),
     (
-      """
-      @PreviewableDouble
-      protocol ServiceProtocol<Item> { var name: String { get } }
-      """,
-      "does not support protocols with associated types or generic constraints"
+      "protocol Base { @MainActor func load() }\n@PreviewableDouble protocol Service: Base { func load() }",
+      "requirement 'load' has incompatible isolation"
     ),
     (
-      """
-      @PreviewableDouble
-      protocol ServiceProtocol { static var shared: String { get } }
-      """,
-      "does not support static property requirements"
-    ),
-    (
-      """
-      @PreviewableDouble
-      protocol ServiceProtocol { static func make() }
-      """,
-      "does not support static method requirements"
+      "@PreviewableDouble protocol Service where Item == Int, Item == String { associatedtype Item }",
+      "incompatible same-type bindings"
     ),
     (
       """

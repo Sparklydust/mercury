@@ -223,7 +223,7 @@ struct PreviewableDoubleGeneratorTests {
 
     let generated = try PreviewableSourceGenerator.generate(from: [source])
     let queued = try #require(generated.range(of: "if !self.loadErrorsStub.isEmpty"))
-    let stored = try #require(generated.range(of: "if let loadErrorStub"))
+    let stored = try #require(generated.range(of: "if let error = self.loadErrorStub"))
     let result = queued.lowerBound < stored.lowerBound
 
     #expect(result, "The queued error check must precede the persistent error check.")

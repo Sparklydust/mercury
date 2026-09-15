@@ -27,7 +27,7 @@ struct DefaultValueResolver {
 
   /// Returns whether the supplied type carries no value.
   static func isVoid(_ type: TypeSyntax) -> Bool {
-    ["Void", "()"].contains(type.trimmedDescription)
+    ["Void", "Swift.Void", "()"].contains(type.trimmedDescription)
   }
 
   /// Returns a compilable default expression for the supplied type.

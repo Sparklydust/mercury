@@ -20,15 +20,8 @@ struct PreviewableDoubleMacro: PeerMacro {
     providingPeersOf declaration: some DeclSyntaxProtocol,
     in context: some MacroExpansionContext
   ) throws -> [DeclSyntax] {
-    guard let protocolDeclaration = declaration.as(ProtocolDeclSyntax.self)
-            else { throw PreviewableMacroError.message("@PreviewableDouble can only be applied to a protocol") }
-
-    guard protocolDeclaration.primaryAssociatedTypeClause == .none,
-          protocolDeclaration.genericWhereClause == .none
-            else {
-      throw PreviewableMacroError
-        .message("@PreviewableDouble does not support protocols with associated types or generic constraints")
-    }
+    guard declaration.is(ProtocolDeclSyntax.self)
+    else { throw PreviewableMacroError.message("@PreviewableDouble can only be applied to a protocol") }
 
     _ = node
     return []

@@ -12,7 +12,7 @@ enum DoubleStorageBuilder {
   /// - Parameters:
   ///   - name: The exposed configuration or recording property name.
   ///   - type: The Swift type spelling of the stored value.
-  ///   - value: The initial value expression.
+  ///   - value: The initial expression, or `nil` for a response that requires explicit configuration.
   ///   - access: Access modifiers, including any required trailing space.
   ///   - isolated: Whether setter assignments may omit the `Sendable` check.
   ///   - documentation: The summary attached to the exposed property, without a comment marker.
@@ -22,7 +22,7 @@ enum DoubleStorageBuilder {
   static func property(
     name: String,
     type: String,
-    value: String,
+    value: String?,
     access: String,
     isolated: Bool,
     documentation: String? = nil,
@@ -34,17 +34,25 @@ enum DoubleStorageBuilder {
     let comment = documentation.map { "/// \($0)\n" } ?? ""
     let backing = nonisolated || sharedBacking ? "nonisolated(unsafe) " : ""
     let modifier = nonisolated ? "nonisolated " : ""
+    let storageType = value == nil ? "Mercury.PreviewableValue<\(type)>" : type
+    let initial = value ?? ".unconfigured"
+    let read = value == nil ? "_previewable_\(name).require(\(String(reflecting: name)))" : "_previewable_\(name)"
+    let assignment = value == nil ? ".configured(newValue)" : "newValue"
+    let modification =
+      value == nil
+      ? "var value = \(read)\n    defer { _previewable_\(name) = .configured(value) }\n    yield &value"
+      : "yield &_previewable_\(name)"
     return """
-      \(isolation)\(backing)private var _previewable_\(name): \(type) = \(value)
+      \(isolation)\(backing)private var _previewable_\(name): \(storageType) = \(initial)
       \(comment)\(isolation)\(access)\(modifier)var \(name): \(type) {
-        get { _previewableLock.withLock { _previewable_\(name) } }
+        get { _previewableLock.withLock { \(read) } }
         set {
-      \(check.indented(by: 4))    _previewableLock.withLock { _previewable_\(name) = newValue }
+      \(check.indented(by: 4))    _previewableLock.withLock { _previewable_\(name) = \(assignment) }
         }
         _modify {
           _previewableLock.lock()
           defer { _previewableLock.unlock() }
-          yield &_previewable_\(name)
+          \(modification)
         }
       }
       """
@@ -73,8 +81,9 @@ enum DoubleStorageBuilder {
       guard case .attribute(let attribute) = element else { return nil }
       let name = attribute.attributeName.trimmedDescription
       let resolved = index.resolve(name, scope: scope) ?? name
-      guard ["MainActor", "Swift.MainActor", "_Concurrency.MainActor"].contains(name)
-        || index.globalActors.contains(resolved)
+      guard
+        ["MainActor", "Swift.MainActor", "_Concurrency.MainActor"].contains(name)
+          || index.globalActors.contains(resolved)
       else { return nil }
       return attribute.trimmedDescription + "\n"
     }.joined()
