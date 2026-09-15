@@ -43,7 +43,8 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     )
     return GeneratedPreviewable(
       debug: [generated.declaration],
-      unconditional: [generated.previewConfiguration]
+      unconditional: [generated.previewConfiguration],
+      globalNames: generated.globalNames
     )
   }
 
@@ -256,7 +257,8 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       """
     return GeneratedDouble(
       declaration: generatedDeclaration,
-      previewConfiguration: associated.parameters.isEmpty ? previewConfiguration : ""
+      previewConfiguration: associated.parameters.isEmpty ? previewConfiguration : "",
+      globalNames: [doubleName] + (associated.parameters.isEmpty ? [doubleAccessorName] : [])
     )
   }
   /// Rejects requirement names that collide with generated storage, stubs, or recording members.

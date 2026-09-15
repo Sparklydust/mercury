@@ -12,7 +12,7 @@ enum PreviewableRequirementFlattener {
   ///   - declaration: The protocol whose requirements are collected.
   ///   - index: The module declarations used for inheritance and type qualification.
   ///   - visited: Qualified protocol names already traversed; updated to prevent duplicate traversal.
-  /// - Throws: `GenerationError` when an inherited non-marker protocol is absent from the module.
+  /// - Throws: `GenerationError` for conditional requirements or an inherited protocol absent from the module.
   static func requirements(
     of declaration: ProtocolDeclSyntax,
     index: ModuleIndex,
@@ -20,6 +20,11 @@ enum PreviewableRequirementFlattener {
   ) throws -> [MemberBlockItemSyntax] {
     let qualified = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
     guard visited.insert(qualified).inserted else { return [] }
+    guard !declaration.memberBlock.members.contains(where: { $0.decl.is(IfConfigDeclSyntax.self) }) else {
+      throw GenerationError.message(
+        "@PreviewableDouble does not support conditional requirements in '\(qualified)' — declare requirements without #if"
+      )
+    }
     let scope = qualified.split(separator: ".").map(String.init)
     let associatedNames = associatedNames(in: declaration, index: index)
     let rewriter = TypeNameResolver(index: index, scope: scope, genericParameters: associatedNames)

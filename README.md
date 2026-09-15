@@ -129,6 +129,8 @@ let namedProfile = Profile.fake(name: "Alex")
 
 Parameters have repeatable defaults and accept overrides. Defaults cover common scalar types, optionals, collections, simple enums, and annotated types. Computed properties and initialized constants are excluded. Override defaults when application validation requires specific values.
 
+Local nongeneric aliases use their underlying defaults, including closure storage and throwing construction.
+
 Factories preserve throwing construction; call them with `try` when required.
 
 For an external type, describe its accessible initializer:
@@ -162,7 +164,8 @@ Unsupported construction produces a diagnostic on the annotated declaration.
 - Generic fields need constructible defaults; a bare `Value` has none. Required nested defaults cannot form a cycle.
 - Nested types need accessible ancestors. Put actor isolation on the type, not its initializer.
 - Inherited protocols must be readable in the same target. Bare `Self` value types, variadic parameters, and generic thrown errors remain unsupported. Subscripts do not yet support responses keyed by arguments.
-- Annotations inside conditional blocks, function bodies, or extensions with nested declarations are unsupported.
+- Annotations inside conditional blocks, function bodies, or extensions with nested declarations are unsupported. Protocol requirements inside `#if` blocks are also rejected, including inherited requirements.
+- Generated double types and global preview accessors must have unique file-scope names. Conditional file-scope declarations reserve their names across configurations.
 - A throwing fake cannot supply a nonthrowing double's stored default.
 
 ### Validation scope

@@ -2,6 +2,7 @@
 // Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
 //
 
+import SwiftParser
 import SwiftSyntax
 
 /// A stored property a generated fake factory takes an argument for.
@@ -13,4 +14,10 @@ struct StoredProperty {
   let type: TypeSyntax
   /// Whether the original declaration permits assignment after initialization.
   let isMutable: Bool
+
+  /// The property name with Swift keywords escaped for labels and local references.
+  var escapedName: String {
+    guard case .keyword = Parser.parse(source: name).firstToken(viewMode: .sourceAccurate)?.tokenKind else { return name }
+    return "`\(name)`"
+  }
 }

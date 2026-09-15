@@ -36,7 +36,8 @@ struct PreviewableSourceMap {
     return GeneratedPreviewable(
       debug: generated.debug.map { attributed($0, to: location) },
       release: generated.release.map { attributed($0, to: location) },
-      unconditional: generated.unconditional.map { attributed($0, to: location) }
+      unconditional: generated.unconditional.map { attributed($0, to: location) },
+      globalNames: generated.globalNames
     )
   }
 

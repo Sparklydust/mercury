@@ -114,7 +114,7 @@ final class DoubleTypeCanonicalizer: SyntaxRewriter {
   /// Expands an alias using the scope where the alias was declared.
   private func expand(_ alias: TypeSyntax, named name: String, fallback: TypeSyntax) -> TypeSyntax {
     guard !visited.contains(name) else {
-      failure = .message("@PreviewableDouble encountered cyclic type alias '\(name)'")
+      failure = .message("encountered cyclic type alias '\(name)'")
       return fallback
     }
     let resolver = DoubleTypeCanonicalizer(

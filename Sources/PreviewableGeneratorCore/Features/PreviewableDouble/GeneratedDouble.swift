@@ -11,4 +11,6 @@ struct GeneratedDouble {
   let declaration: String
   /// The shared accessor with separate Debug and non-Debug implementations.
   let previewConfiguration: String
+  /// The type and optional accessor names reserved at file scope.
+  let globalNames: [String]
 }

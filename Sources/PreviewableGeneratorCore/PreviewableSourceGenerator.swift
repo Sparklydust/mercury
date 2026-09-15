@@ -62,6 +62,7 @@ public enum PreviewableSourceGenerator {
     var doubleResolver = DefaultValueResolver(index: index, context: .double)
     var fakeResolver = DefaultValueResolver(index: index, context: .fake)
     var sections: [PreviewableAnnotation: GeneratedPreviewable] = [:]
+    var generatedNames: Set<String> = []
 
     for annotation in index.annotations {
       do {
@@ -79,6 +80,13 @@ public enum PreviewableSourceGenerator {
             index: index,
             resolver: &fakeResolver
           )
+        }
+        for name in generated.globalNames {
+          guard !index.globalNames.contains(name), generatedNames.insert(name).inserted else {
+            throw GenerationError.message(
+              "@\(annotation.annotation.rawValue) generated name '\(name)' conflicts with another declaration — rename it"
+            )
+          }
         }
         sections[annotation.annotation, default: GeneratedPreviewable()] += sourceMap.attributed(
           generated, to: annotation)

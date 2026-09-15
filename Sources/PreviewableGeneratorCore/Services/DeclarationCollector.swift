@@ -23,6 +23,7 @@ final class DeclarationCollector: SyntaxVisitor {
   override func visit(_ node: ProtocolDeclSyntax) -> SyntaxVisitorContinueKind {
     let position = Self.lexicalPosition(of: node)
     let name = node.name.text
+    recordGlobalName(name, at: node)
     register(protocol: node, named: name, at: position)
     if let annotated = Self.annotation(in: node.attributes) {
       record(annotated, declaration: DeclSyntax(node), name: name, position: position, node: node)
@@ -31,11 +32,26 @@ final class DeclarationCollector: SyntaxVisitor {
   }
 
   override func visit(_ node: TypeAliasDeclSyntax) -> SyntaxVisitorContinueKind {
+    recordGlobalName(node.name.text, at: node)
     let name = Self.qualifiedName(for: node.name.text, at: Self.lexicalPosition(of: node))
     index.typeAccess[name] = Self.effectiveAccess(of: node, modifiers: node.modifiers)
     if node.genericParameterClause == nil {
       index.typeAliases[name] = node.initializer.value
     }
+    return .visitChildren
+  }
+
+  override func visit(_ node: VariableDeclSyntax) -> SyntaxVisitorContinueKind {
+    for binding in node.bindings {
+      for token in binding.pattern.tokens(viewMode: .sourceAccurate) {
+        if case .identifier(let name) = token.tokenKind { recordGlobalName(name, at: node) }
+      }
+    }
+    return .visitChildren
+  }
+
+  override func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {
+    if node.signature.parameterClause.parameters.isEmpty { recordGlobalName(node.name.text, at: node) }
     return .visitChildren
   }
 
@@ -114,6 +130,21 @@ final class DeclarationCollector: SyntaxVisitor {
 
 extension DeclarationCollector {
 
+  /// Records names outside member blocks, functions, and closures, including conditional file-scope declarations.
+  /// - Parameters:
+  ///   - name: The declared name, optionally escaped with backticks.
+  ///   - node: The declaration whose enclosing scopes are inspected.
+  private func recordGlobalName(_ name: String, at node: some SyntaxProtocol) {
+    var current = node.parent
+    while let parent = current {
+      if parent.is(MemberBlockSyntax.self) || parent.is(CodeBlockSyntax.self) || parent.is(ClosureExprSyntax.self) {
+        return
+      }
+      current = parent.parent
+    }
+    index.globalNames.insert(name.replacingOccurrences(of: "`", with: ""))
+  }
+
   /// Registers nominal type metadata and records any Previewable annotation.
   /// - Parameters:
   ///   - node: The syntax node used to determine lexical scope and source location.
@@ -130,6 +161,7 @@ extension DeclarationCollector {
     isGeneric: Bool,
     declaration: DeclSyntax
   ) {
+    recordGlobalName(name, at: node)
     let position = Self.lexicalPosition(of: node)
     let keys = Self.keys(for: name, at: position)
     index.declaredTypes.formUnion(keys)

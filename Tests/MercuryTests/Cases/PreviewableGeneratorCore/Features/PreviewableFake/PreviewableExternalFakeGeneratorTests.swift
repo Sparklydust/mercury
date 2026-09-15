@@ -7,6 +7,15 @@ import Testing
 
 struct PreviewableExternalFakeGeneratorTests {
 
+  @Test(arguments: ["repeat", "class", "default", "self"])
+  func generator_externalParameterIsKeyword_argumentReferenceIsEscaped(_ name: String) throws {
+    let source = "@PreviewableFake(parameters: [(\"\(name)\", Int.self)]) extension Model {}"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains("`\(name)`: `\(name)`"), "Keyword labels and references must remain valid Swift syntax.")
+  }
+
   private static let externalSource = """
     import Foundation
 

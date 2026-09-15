@@ -13,6 +13,8 @@ struct GeneratedPreviewable {
   var release: [String] = []
   /// Declarations emitted after the `#endif`, because they carry their own availability.
   var unconditional: [String] = []
+  /// File-scope names reserved by the declarations this feature actually emits.
+  var globalNames: [String] = []
 
   /// Appends contributed declarations to each corresponding output section.
   /// - Parameters:
@@ -22,5 +24,6 @@ struct GeneratedPreviewable {
     accumulated.debug += contributed.debug
     accumulated.release += contributed.release
     accumulated.unconditional += contributed.unconditional
+    accumulated.globalNames += contributed.globalNames
   }
 }

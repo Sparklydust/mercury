@@ -19,6 +19,8 @@ struct ModuleIndex {
   var typeAccess: [String: AccessLevel] = [:]
   /// Nongeneric typealias targets keyed by qualified declaration name.
   var typeAliases: [String: TypeSyntax] = [:]
+  /// File-scope names that cannot coexist with a generated type or property.
+  var globalNames: Set<String> = []
 
   /// Nominal types declared with generic parameters, by qualified name.
   var genericTypes: Set<String> = []
@@ -72,6 +74,7 @@ struct ModuleIndex {
     enumDefaults.merge(other.enumDefaults) { current, _ in current }
     typeAccess.merge(other.typeAccess) { current, _ in current }
     typeAliases.merge(other.typeAliases) { current, _ in current }
+    globalNames.formUnion(other.globalNames)
     declaredTypes.formUnion(other.declaredTypes)
     genericTypes.formUnion(other.genericTypes)
     fakeAnnotatedTypes.formUnion(other.fakeAnnotatedTypes)

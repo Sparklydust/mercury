@@ -138,6 +138,59 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     print('PASS', name, flush=True)
     return output
 
+  for condition in ['os(macOS)', 'os(iOS)', 'DEBUG']:
+    verify('conditional-requirement-' + condition,
+      '@PreviewableDouble protocol Service {\n#if ' + condition + '\nfunc refresh()\n#endif\n}',
+      generation_error="conditional requirements in 'Service'")
+  verify('inherited-conditional-requirement',
+    'protocol Base {\n#if os(macOS)\nfunc refresh()\n#endif\n}\n'
+    '@PreviewableDouble protocol Service: Base {}', generation_error="conditional requirements in 'Base'")
+  for number, declaration in enumerate([
+    'let serviceDouble = 42', 'let (serviceDouble, other) = (1, 2)', 'private let `serviceDouble` = 42',
+    'func serviceDouble() -> Int { 1 }', 'struct serviceDouble {}', '@PreviewableDouble protocol service {}',
+  ]):
+    verify('accessor-collision-' + str(number), [declaration, '@PreviewableDouble protocol Service {}'],
+      generation_error="generated name 'serviceDouble' conflicts")
+  verify('accessor-name-in-other-scopes',
+    'struct Scope { let serviceDouble = 1 }\nfunc serviceDouble(_ value: Int) -> Int { value }\n'
+    '@PreviewableDouble protocol Service {}')
+  verify('generic-double-with-global-name',
+    'let serviceDouble = 1\n@PreviewableDouble protocol Service { associatedtype Value; func load() -> Value }')
+  alias_source = ('typealias Count = Int\ntypealias Total = Count\n'
+    '@PreviewableFake struct Model { let count: Total }\n'
+    '@PreviewableDouble protocol Service { func count() -> Total }')
+  verify('alias-fake-and-double', alias_source,
+    'precondition(Model.fake().count > 0)\nprecondition(ServiceDouble().count() == 0)')
+  verify('alias-release-signature', alias_source, release=True)
+  verify('alias-lexical-scope',
+    'typealias Value = String\nenum Domain { typealias Value = Int; typealias Count = Value; '
+    '@PreviewableFake struct Model { typealias Value = Bool; let count: Count } }',
+    'precondition(Domain.Model.fake().count > 0)')
+  verify('alias-closure-storage',
+    'typealias Action = () -> Int\n@PreviewableFake struct Model { let action: Action }\n'
+    '@PreviewableFake final class Reference { var action: Action = { 0 }; init() {} }',
+    'precondition(Model.fake().action() > 0)\nprecondition(Reference.fake().action() > 0)')
+  verify('alias-optional-recursion',
+    'typealias Next = Model?\n@PreviewableFake final class Model { var next: Next = nil; init() {} }',
+    'precondition(Model.fake().next == nil)')
+  verify('alias-eager-recursion',
+    'typealias Next = Model\n@PreviewableFake final class Model { var next: Next; init() { fatalError() } }',
+    generation_error='recursive default construction')
+  verify('alias-cycle', 'typealias A = B\ntypealias B = A\n@PreviewableFake struct Model { let value: A }',
+    generation_error='cyclic type alias')
+  alias_throwing = ('@PreviewableFake struct Leaf { let value: Int; init(value: Int) throws { self.value = value } }\n'
+    'typealias Item = Leaf\n@PreviewableFake struct Model { let leaf: Item }')
+  verify('alias-throwing-default', alias_throwing, 'let value = try Model.fake()\nprecondition(value.leaf.value > 0)')
+  verify('alias-throwing-release', alias_throwing, release=True)
+  for name in ['repeat', 'class', 'default', 'self']:
+    source = '@PreviewableFake struct Model { let `' + name + '`: Int }'
+    verify('stored-keyword-' + name, source, 'precondition(Model.fake().' + '`' + name + '` > 0)')
+    verify('stored-keyword-release-' + name, source, release=True)
+    source = ('struct Model { let `' + name + '`: Int }\n'
+      '@PreviewableFake(parameters: [("' + name + '", Int.self)]) extension Model {}')
+    verify('external-keyword-' + name, source, 'precondition(Model.fake().' + '`' + name + '` > 0)')
+    verify('external-keyword-release-' + name, source, release=True)
+
   for number, initializer in enumerate(['init(token: Int) {}', 'init() throws {}']):
     verify('inherited-initializer-' + str(number),
       'class Base { ' + initializer + ' }\n@PreviewableFake final class Model: Base { var value = 0 }',

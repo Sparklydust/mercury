@@ -21,17 +21,18 @@ enum PreviewableFakeFactoryBuilder {
     var arguments: [String] = []
     let message = String(reflecting: "\(recipe.typeName).fake(...) is unavailable outside Debug builds")
     for property in recipe.properties {
+      let name = property.escapedName
       resolver.fieldName = "\(recipe.typeName).\(property.name)"
       resolver.usedThrowingDefault = false
       let value = try resolver.defaultValue(for: property.type)
       let deferred = resolver.usedThrowingDefault
       let type = property.type.trimmedDescription
-      let parameter = deferred ? "@autoclosure () throws -> \(type)" : parameterType(property)
-      parameters.append("\(property.name): \(parameter) = \(value)")
+      let parameter = deferred ? "@autoclosure () throws -> \(type)" : try parameterType(property, resolver: resolver)
+      parameters.append("\(name): \(parameter) = \(value)")
       releaseParameters.append(
-        "\(property.name): \(parameter) = { () -> \(type) in preconditionFailure(\(message)) }()"
+        "\(name): \(parameter) = { () -> \(type) in preconditionFailure(\(message)) }()"
       )
-      arguments.append("\(property.name): \(deferred ? "try \(property.name)()" : property.name)")
+      arguments.append("\(name): \(deferred ? "try \(name)()" : name)")
     }
     let effects = isThrowing ? " throws" : ""
     let initializerEffects = recipe.initializerThrows ? " throws" : ""
@@ -46,8 +47,10 @@ enum PreviewableFakeFactoryBuilder {
       """
     var members: [String] = []
     if recipe.convenienceInitializer {
-      let declarations = recipe.properties.map { "\($0.name): \(parameterType($0))" }.joined(separator: ",\n")
-      let assignments = recipe.properties.map { "self.\($0.name) = \($0.name)" }.joined(separator: "\n")
+      let declarations = try recipe.properties.map {
+        "\($0.escapedName): \(try parameterType($0, resolver: resolver))"
+      }.joined(separator: ",\n")
+      let assignments = recipe.properties.map { "self.\($0.escapedName) = \($0.escapedName)" }.joined(separator: "\n")
       members.append(
         """
         \(recipe.access)convenience init(
@@ -93,9 +96,12 @@ enum PreviewableFakeFactoryBuilder {
   }
 
   /// Returns the parameter type, adding `@escaping` for a stored function value.
-  /// - Parameter property: The property supplied by the factory parameter.
-  private static func parameterType(_ property: StoredProperty) -> String {
+  /// - Parameters:
+  ///   - property: The property supplied by the factory parameter.
+  ///   - resolver: The resolver used to inspect aliased function types.
+  /// - Throws: `GenerationError` for cyclic aliases.
+  private static func parameterType(_ property: StoredProperty, resolver: DefaultValueResolver) throws -> String {
     let type = property.type.trimmedDescription
-    return property.type.isFunctionType ? "@escaping \(type)" : type
+    return try resolver.resolvedType(property.type).isFunctionType ? "@escaping \(type)" : type
   }
 }

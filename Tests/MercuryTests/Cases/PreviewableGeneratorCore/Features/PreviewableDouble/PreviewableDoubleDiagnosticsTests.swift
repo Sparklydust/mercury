@@ -7,6 +7,37 @@ import Testing
 
 struct PreviewableDoubleDiagnosticsTests {
 
+  @Test(arguments: ["os(iOS)", "DEBUG", "FEATURE_ENABLED"])
+  func generator_protocolHasConditionalRequirements_diagnosticNamesUnsupportedBlock(_ condition: String) {
+    let source = """
+      @PreviewableDouble protocol Service {
+        #if \(condition)
+        func refresh()
+        #endif
+      }
+      """
+
+    let result = generatorDiagnosticMessage(for: source)
+
+    #expect(result?.contains("conditional requirements in 'Service'") == true, "Conditional witnesses cannot be omitted.")
+  }
+
+  @Test
+  func generator_inheritedProtocolHasConditionalRequirements_diagnosticNamesBaseProtocol() {
+    let source = """
+      protocol Base {
+        #if os(iOS)
+        func refresh()
+        #endif
+      }
+      @PreviewableDouble protocol Service: Base {}
+      """
+
+    let result = generatorDiagnosticMessage(for: source)
+
+    #expect(result?.contains("conditional requirements in 'Base'") == true, "Inherited conditional requirements must fail.")
+  }
+
   @Test(arguments: [
     (
       "typealias ServiceDouble = Int\n@PreviewableDouble protocol Service {}",

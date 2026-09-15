@@ -34,6 +34,8 @@ struct DefaultValueResolver {
   /// - Parameter type: The qualified type whose default expression is required.
   /// - Throws: `GenerationError` when no correct default can be synthesised.
   mutating func defaultValue(for type: TypeSyntax) throws -> String {
+    let writtenType = type.trimmedDescription
+    let type = try resolvedType(type)
     if let attributed = type.as(AttributedTypeSyntax.self) {
       return try defaultValue(for: attributed.baseType)
     }
@@ -66,8 +68,18 @@ struct DefaultValueResolver {
       )
     }
     throw GenerationError.message(
-      "cannot synthesise a default for '\(type.trimmedDescription)' — no automatic default is available"
+      "cannot synthesise a default for '\(writtenType)' — no automatic default is available"
     )
+  }
+
+  /// Expands local aliases without changing the declared factory or requirement signature.
+  /// - Parameter type: A type already qualified in its declaration scope.
+  /// - Throws: `GenerationError` for cyclic aliases.
+  func resolvedType(_ type: TypeSyntax) throws -> TypeSyntax {
+    try DoubleTypeCanonicalizer(
+      index: index, scope: [],
+      substitutions: Dictionary(uniqueKeysWithValues: genericParameters.map { ($0, $0) })
+    ).resolved(type)
   }
 }
 

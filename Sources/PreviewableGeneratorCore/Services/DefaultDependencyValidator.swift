@@ -7,37 +7,39 @@ enum DefaultDependencyValidator {
   /// - Parameters:
   ///   - index: The resolved fake recipes and protocol declarations.
   ///   - sourceMap: The source locations used for validation failures.
-  /// - Throws: A source diagnostic for cyclic defaults or unreadable inherited requirements.
+  /// - Throws: A source diagnostic for cyclic aliases or defaults, or unsupported inherited requirements.
   static func validate(_ index: ModuleIndex, sourceMap: PreviewableSourceMap) throws {
     var edges: [String: Set<String>] = [:]
     for annotation in index.annotations {
       let name = annotation.qualifiedName
-      if let fake = index.fakes[name] {
-        edges[name] = Set(fake.properties.flatMap { dependencies($0.type, index: index) })
-      } else if let declaration = annotation.declaration.as(ProtocolDeclSyntax.self) {
-        var visited: Set<String> = []
-        let members: [MemberBlockItemSyntax]
-        do {
-          members = try PreviewableRequirementFlattener.requirements(of: declaration, index: index, visited: &visited)
-        } catch let error as GenerationError {
-          throw sourceMap.diagnostic(error.message, for: annotation)
-        }
-        let rewriter = TypeNameResolver(index: index, scope: name.split(separator: ".").map(String.init))
-        edges[name] = Set(
-          members.flatMap { member -> [String] in
+      do {
+        var resolver = DefaultValueResolver(index: index, context: .fake)
+        let types: [TypeSyntax]
+        if let fake = index.fakes[name] {
+          resolver.genericParameters = fake.genericParameters
+          types = fake.properties.map(\.type)
+        } else if let declaration = annotation.declaration.as(ProtocolDeclSyntax.self) {
+          var visited: Set<String> = []
+          let members = try PreviewableRequirementFlattener.requirements(
+            of: declaration, index: index, visited: &visited)
+          resolver.genericParameters = Set(members.compactMap { $0.decl.as(AssociatedTypeDeclSyntax.self)?.name.text })
+          types = members.flatMap { member -> [TypeSyntax] in
             if let variable = member.decl.as(VariableDeclSyntax.self) {
-              return variable.bindings.flatMap { binding -> [String] in
-                guard let type = binding.typeAnnotation?.type else { return [] }
-                return dependencies(rewriter.rewrite(type).cast(TypeSyntax.self), index: index)
-              }
+              return variable.bindings.compactMap { $0.typeAnnotation?.type }
             }
             if let function = member.decl.as(FunctionDeclSyntax.self), function.genericParameterClause == nil,
               let type = function.signature.returnClause?.type
             {
-              return dependencies(rewriter.rewrite(type).cast(TypeSyntax.self), index: index)
+              return [type]
             }
             return []
-          })
+          }
+        } else {
+          continue
+        }
+        edges[name] = Set(try types.flatMap { dependencies(try resolver.resolvedType($0), index: index) })
+      } catch let error as GenerationError {
+        throw sourceMap.diagnostic(error.message, for: annotation)
       }
     }
     var completed: Set<String> = []
