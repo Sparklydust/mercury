@@ -13,6 +13,7 @@ enum PreviewableDoubleMemberBuilder {
   ///   - access: The access modifier prefix for generated members.
   ///   - seen: Property names already emitted; updated with new names.
   ///   - isolated: Whether stored values may rely on global-actor isolation.
+  ///   - sendable: Whether unisolated stored values must conform to `Sendable`.
   ///   - resolver: The state used to construct property defaults.
   /// - Throws: `GenerationError` for unsupported properties or unavailable defaults.
   static func propertyDeclarations(
@@ -20,6 +21,7 @@ enum PreviewableDoubleMemberBuilder {
     access: String,
     seen: inout Set<String>,
     isolated: Bool,
+    sendable: Bool,
     resolver: inout DefaultValueResolver
   ) throws -> [GeneratedProperty] {
     let isolation = DoubleStorageBuilder.isolationAttributes(in: declaration.attributes, index: resolver.index)
@@ -50,7 +52,7 @@ enum PreviewableDoubleMemberBuilder {
       let defaultValue = try configuredDefault(for: type, resolver: &resolver)
       let stub = DoubleStorageBuilder.property(
         name: name + "Stub", type: printedType, value: defaultValue, access: access,
-        isolated: memberIsolated, documentation: "The configured property value; assignments update this stub.",
+        isolated: !sendable || memberIsolated, documentation: "The configured property value; assignments update this stub.",
         isolation: isolation, nonisolated: nonisolated
       )
 
@@ -86,6 +88,7 @@ enum PreviewableDoubleMemberBuilder {
   ///   - function: The protocol method requirement.
   ///   - access: The access modifier prefix for generated members.
   ///   - isolated: Whether recorded values may rely on global-actor isolation.
+  ///   - sendable: Whether unisolated arguments and responses must conform to `Sendable`.
   ///   - resolver: The state used to construct nongeneric return defaults.
   ///   - stubName: The allocated storage stem, or `nil` to use the method name.
   ///   - recordingKey: The canonical overload identity, or `nil` to use Swift's function name.
@@ -95,6 +98,7 @@ enum PreviewableDoubleMemberBuilder {
     from function: FunctionDeclSyntax,
     access: String,
     isolated: Bool,
+    sendable: Bool,
     resolver: inout DefaultValueResolver,
     stubName: String? = nil,
     recordingKey: String? = nil,
@@ -108,6 +112,7 @@ enum PreviewableDoubleMemberBuilder {
     let nonisolated = function.modifiers.contains { $0.name.text == "nonisolated" }
     let modifier = (nonisolated ? "nonisolated " : "") + (function.modifiers.isStatic ? "static " : "")
     let memberIsolated = !nonisolated && (isolated || !isolation.isEmpty)
+    let requiresSendable = sendable && !memberIsolated
     let isGeneric = function.genericParameterClause != nil
     resolver.fieldName = methodName
     let signatureTypes =
@@ -128,7 +133,7 @@ enum PreviewableDoubleMemberBuilder {
         throw GenerationError.message("@PreviewableDouble requires a named local parameter")
       }
       // A non-escaping closure cannot be stored, so function-typed arguments are not recorded.
-      guard !parameter.type.isFunctionType else { continue }
+      guard try !resolver.resolvedType(parameter.type).isFunctionType else { continue }
       parameters.append(localName)
     }
 
@@ -146,14 +151,14 @@ enum PreviewableDoubleMemberBuilder {
       declarations.append(
         DoubleStorageBuilder.property(
           name: stub + "ErrorStub", type: "(\(thrownType))?", value: ".none", access: access,
-          isolated: memberIsolated, documentation: "The persistent error thrown after queued errors are consumed.",
+          isolated: !requiresSendable, documentation: "The persistent error thrown after queued errors are consumed.",
           isolation: isolation, nonisolated: nonisolated
         ))
       // A retrying caller needs a different outcome per call, which one stored error cannot express.
       declarations.append(
         DoubleStorageBuilder.property(
           name: stub + "ErrorsStub", type: "[\(thrownType)]", value: "[]", access: access,
-          isolated: memberIsolated,
+          isolated: !requiresSendable,
           documentation: "Errors consumed atomically in FIFO order; concurrent callers are ordered by scheduling.",
           isolation: isolation, nonisolated: nonisolated
         ))
@@ -163,18 +168,19 @@ enum PreviewableDoubleMemberBuilder {
     let returnsValue = returnType.map { !DefaultValueResolver.isVoid($0) } ?? false
     if let returnType, returnsValue {
       if isGeneric {
-        try GenericResponseValidator.validate(function, index: resolver.index)
+        if requiresSendable { try GenericResponseValidator.validate(function, index: resolver.index) }
+        let storage = requiresSendable ? "PreviewableResponses" : "PreviewableLocalResponses"
         declarations.append(
           """
           /// Responses keyed by concrete return type; configure each type before calling the requirement.
-          \(isolation)\(access)\(nonisolated ? "nonisolated " : "")let \(stub)Stub = PreviewableResponses()
+          \(isolation)\(access)\(nonisolated ? "nonisolated " : "")let \(stub)Stub = \(storage)()
           """)
       } else {
         let defaultValue = try configuredDefault(for: returnType, resolver: &resolver)
         declarations.append(
           DoubleStorageBuilder.property(
             name: stub + "Stub", type: returnType.trimmedDescription,
-            value: defaultValue, access: access, isolated: memberIsolated,
+            value: defaultValue, access: access, isolated: !requiresSendable,
             documentation: defaultValue == nil
               ? "The response to configure before use. For optional responses, an explicit nil counts as configured."
               : "The response returned by this requirement after any configured errors are consumed.",
@@ -188,7 +194,7 @@ enum PreviewableDoubleMemberBuilder {
       "\(receiver)._previewable_calledMethods.append(\(key))",
       "\(receiver)._previewable_\(recording)[\(key), default: []].append([\(parameters.joined(separator: ", "))])",
     ]
-    if !memberIsolated {
+    if requiresSendable {
       body.insert(contentsOf: parameters.map { "Mercury.previewableRequireSendable(\($0))" }, at: 0)
     }
     if isThrowing {
@@ -250,12 +256,14 @@ enum PreviewableDoubleMemberBuilder {
   ///   - initializer: The initializer requirement to witness.
   ///   - access: The generated member's access modifier prefix.
   ///   - isolated: Whether recorded values may rely on global-actor isolation.
+  ///   - sendable: Whether unisolated initializer arguments must conform to `Sendable`.
   ///   - index: Global actors available for resolving initializer isolation.
   /// - Throws: `GenerationError` when an argument has no local name for invocation recording.
   static func initializerDeclaration(
     from initializer: InitializerDeclSyntax,
     access: String,
     isolated: Bool,
+    sendable: Bool,
     index: ModuleIndex
   ) throws -> String? {
     let parameters = Array(initializer.signature.parameterClause.parameters)
@@ -269,7 +277,7 @@ enum PreviewableDoubleMemberBuilder {
         throw GenerationError.message("@PreviewableDouble requires a named local parameter")
       }
       // A non-escaping closure cannot be stored, so function-typed arguments are not recorded.
-      guard !parameter.type.isFunctionType else { continue }
+      guard try !DoubleTypeCanonicalizer(index: index, scope: []).resolved(parameter.type).isFunctionType else { continue }
       recorded.append(localName)
     }
 
@@ -277,7 +285,7 @@ enum PreviewableDoubleMemberBuilder {
     let nonisolated = initializer.modifiers.contains { $0.name.text == "nonisolated" }
     let modifier = nonisolated ? "nonisolated " : ""
     let checks =
-      !nonisolated && (isolated || !isolation.isEmpty)
+      !sendable || (!nonisolated && (isolated || !isolation.isEmpty))
       ? "" : recorded.map { "Mercury.previewableRequireSendable(\($0))" }.joined(separator: "\n")
     let recording = DoubleStorageBuilder.recordingName(for: isolation)
     let attributes = initializer.attributes.isEmpty ? "" : initializer.attributes.trimmedDescription + "\n"

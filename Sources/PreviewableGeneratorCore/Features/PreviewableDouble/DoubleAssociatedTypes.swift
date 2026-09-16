@@ -22,9 +22,10 @@ struct DoubleAssociatedTypes {
   ///   - members: Flattened local requirements, including associated types.
   ///   - index: Locally available declarations.
   ///   - isolated: Whether the protocol has global-actor isolation.
+  ///   - sendable: Whether instances must support transfer between isolation domains.
   /// - Throws: For recursive associated-type bindings.
   init(
-    declaration: ProtocolDeclSyntax, members: [MemberBlockItemSyntax], index: ModuleIndex, isolated: Bool
+    declaration: ProtocolDeclSyntax, members: [MemberBlockItemSyntax], index: ModuleIndex, isolated: Bool, sendable: Bool
   ) throws {
     let associated = members.compactMap { $0.decl.as(AssociatedTypeDeclSyntax.self) }
     let names = Set(associated.map(\.name.text))
@@ -156,6 +157,7 @@ struct DoubleAssociatedTypes {
       let subscriptDeclaration = syntax.as(MemberBlockItemSyntax.self)?.decl.as(SubscriptDeclSyntax.self)
       let attributes = function?.attributes ?? variable?.attributes ?? subscriptDeclaration?.attributes ?? []
       let modifiers = function?.modifiers ?? variable?.modifiers ?? subscriptDeclaration?.modifiers ?? []
+      guard sendable || modifiers.isStatic else { continue }
       let nonisolated = modifiers.contains { $0.name.text == "nonisolated" }
       if !nonisolated && (isolated || !DoubleStorageBuilder.isolationAttributes(in: attributes, index: index).isEmpty) {
         continue

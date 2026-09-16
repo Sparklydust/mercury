@@ -13,10 +13,11 @@ enum DoubleSubscriptBuilder {
   ///   - requirement: The canonical subscript requirement and allocated stub name.
   ///   - access: The double's effective access prefix.
   ///   - isolated: Whether the protocol has global-actor isolation.
+  ///   - sendable: Whether unisolated indices and responses must conform to `Sendable`.
   ///   - resolver: The default construction context.
   /// - Throws: For unsupported argument forms or unavailable response defaults.
   static func generate(
-    _ requirement: DoubleRequirement, access: String, isolated: Bool, resolver: inout DefaultValueResolver
+    _ requirement: DoubleRequirement, access: String, isolated: Bool, sendable: Bool, resolver: inout DefaultValueResolver
   ) throws -> GeneratedMethod {
     let declaration = requirement.subscriptDeclaration!
     let function = requirement.function!
@@ -35,7 +36,7 @@ enum DoubleSubscriptBuilder {
     let resolutionName = "_previewableResolve_" + requirement.stubName
     let getter = try PreviewableDoubleMemberBuilder.methodDeclaration(
       from: function, access: access,
-      isolated: isolated, resolver: &resolver, stubName: requirement.stubName, recordingKey: key + ".get",
+      isolated: isolated, sendable: sendable, resolver: &resolver, stubName: requirement.stubName, recordingKey: key + ".get",
       responseExpression: "self.\(resolutionName)(\(arguments.joined(separator: ", ")))")
     var resolverFunction = function
     resolverFunction.signature.effectSpecifiers = nil
@@ -75,7 +76,7 @@ enum DoubleSubscriptBuilder {
       setterFunction.signature.parameterClause.parameters = FunctionParameterListSyntax(setterParameters)
       let setter = try PreviewableDoubleMemberBuilder.methodDeclaration(
         from: setterFunction, access: access,
-        isolated: isolated, resolver: &resolver, stubName: requirement.stubName, recordingKey: key + ".set")
+        isolated: isolated, sendable: sendable, resolver: &resolver, stubName: requirement.stubName, recordingKey: key + ".set")
       accessors.append("set(\(assignedName)) \(body(of: setter.requirement))")
     }
     let subscriptSignature =

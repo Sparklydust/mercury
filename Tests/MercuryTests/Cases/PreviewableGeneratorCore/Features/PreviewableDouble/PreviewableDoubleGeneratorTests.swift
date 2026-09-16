@@ -16,7 +16,7 @@ struct PreviewableDoubleGeneratorTests {
     }
 
     @PreviewableDouble
-    protocol ServiceProtocol {
+    protocol ServiceProtocol: Sendable {
       var state: Mode { get set }
       func load(id: Int) async throws -> [String]
     }
@@ -97,7 +97,7 @@ struct PreviewableDoubleGeneratorTests {
     let source = """
       protocol Transferable: Sendable {}
       typealias ResponseConstraint = Transferable
-      @PreviewableDouble protocol ServiceProtocol { func make\(signature) }
+      @PreviewableDouble protocol ServiceProtocol: Sendable { func make\(signature) }
       """
     let expected = "let makeStub = PreviewableResponses()"
 
@@ -306,7 +306,7 @@ struct PreviewableDoubleGeneratorTests {
   @Test
   func generator_publicProtocolHasInternalParent_doubleAccessIsCapped() throws {
     let source = "enum Scope { @PreviewableDouble public protocol Service {} }"
-    let expected = "final class ServiceDouble: Scope.Service, @unchecked Sendable {"
+    let expected = "final class ServiceDouble: Scope.Service {"
 
     let generated = try PreviewableSourceGenerator.generate(from: [source])
     let result = generated.components(separatedBy: "\n").first { $0.contains("final class ServiceDouble") }

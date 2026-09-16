@@ -48,17 +48,17 @@ struct PreviewableDoubleDiagnosticsTests {
       "generated type 'ServiceDouble' conflicts with an existing declaration"
     ),
     (
-      "@PreviewableDouble protocol Service { func make<Value>() -> Value }",
+      "@PreviewableDouble protocol Service: Sendable { func make<Value>() -> Value }",
       "generic response 'Value' in 'make' requires a Sendable constraint"
     ),
     (
-      "@PreviewableDouble protocol Service { func make<Value: Codable>() -> [Value] }",
+      "@PreviewableDouble protocol Service: Sendable { func make<Value: Codable>() -> [Value] }",
       "generic response 'Value' in 'make' requires a Sendable constraint"
     ),
     (
       """
       enum Domain { protocol Sendable {} }
-      @PreviewableDouble protocol Service { func make<Value: Domain.Sendable>() -> Value }
+      @PreviewableDouble protocol Service: Swift.Sendable { func make<Value: Domain.Sendable>() -> Value }
       """,
       "generic response 'Value' in 'make' requires a Sendable constraint"
     ),

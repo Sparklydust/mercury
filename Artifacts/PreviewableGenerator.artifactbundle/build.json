@@ -1,8 +1,8 @@
 {
-  "sourceSHA256": "8eb4d9ed75958e3bfc0d26ed1b1b8fda4c2d259acc4ea12dd8878f42ed02e491",
+  "sourceSHA256": "8699b70c5b32eb20d8b9a4c019ef8c1823abef53f65a9affba4fbbcb50bbf724",
   "swiftVersion": "Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)\nTarget: arm64-apple-macosx27.0.0",
   "files": {
-    "bin/PreviewableGenerator": "3093e2d13062f8443690b3c19e8e7c7ded89ac88bdfa6921e9d0f5353fea207a",
+    "bin/PreviewableGenerator": "42e2bf69b8dc4c1286043fd746940940c1d87f71c12e53553b795377999c7ad0",
     "bin/PreviewableMacrosPlugin": "a46e8a577eb40d8e0fab5193719f57751079f5be534339837603917be50865e4",
     "info.json": "c89ad621a640126f18e3cda5858fefd01205f223015114cb149f89d57c287f87",
     "licenses/SwiftSyntax-LICENSE.txt": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"

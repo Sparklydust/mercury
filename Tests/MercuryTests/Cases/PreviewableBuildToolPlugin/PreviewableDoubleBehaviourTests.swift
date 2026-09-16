@@ -240,12 +240,12 @@ struct PreviewableDoubleBehaviourTests {
   }
 
   @Test
-  func accessor_publicProtocolIsRead_sharedDoubleIsReturned() {
+  func accessor_publicProtocolIsRead_freshDoubleIsReturned() {
     let expected = PublicServiceDouble.preview
 
     let result = publicServiceDouble
 
-    #expect(result === expected, "The public accessor must return the shared preview instance.")
+    #expect(result !== expected, "A non-Sendable accessor must return a fresh preview instance.")
   }
 
   @MainActor

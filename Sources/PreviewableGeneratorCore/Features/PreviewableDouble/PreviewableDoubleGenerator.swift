@@ -65,6 +65,8 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       throw GenerationError.message("@PreviewableDouble cannot access a private or fileprivate protocol")
     }
     let isolated = DoubleStorageBuilder.isIsolated(declaration, index: index)
+    let sendable = isolated || GenericResponseValidator.impliesSendable(
+      TypeSyntax(IdentifierTypeSyntax(name: .identifier(qualifiedName))), index: index)
     let protocolName = declaration.name.text
     let doubleName = PreviewableDoubleNaming.doubleName(for: protocolName)
     guard index.typeAccess[doubleName] == nil else {
@@ -77,7 +79,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       of: declaration, index: index, visited: &visited)
     let associated = try DoubleAssociatedTypes(
       declaration: declaration, members: originalMembers, index: index,
-      isolated: isolated)
+      isolated: isolated, sendable: sendable)
     let rewriter = DoubleTypeSubstitution(associated.bindings)
     let members = originalMembers.filter { !$0.decl.is(AssociatedTypeDeclSyntax.self) }
       .map { rewriter.rewrite($0).cast(MemberBlockItemSyntax.self) }
@@ -120,6 +122,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
           access: access,
           seen: &names,
           isolated: isolated,
+          sendable: sendable || requirement.isStatic,
           resolver: &resolver
         )
         if requirement.isStatic { staticPropertyNames = names } else { propertyNames = names }
@@ -131,7 +134,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       }
       if requirement.subscriptDeclaration != nil {
         let generated = try DoubleSubscriptBuilder.generate(
-          requirement, access: access, isolated: isolated,
+          requirement, access: access, isolated: isolated, sendable: sendable || requirement.isStatic,
           resolver: &resolver)
         if requirement.isStatic { staticStubs += generated.stubs } else { stubDeclarations += generated.stubs }
         requirementDeclarations.append(generated.requirement)
@@ -142,6 +145,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
           from: function,
           access: access,
           isolated: isolated,
+          sendable: sendable || requirement.isStatic,
           resolver: &resolver,
           stubName: requirement.stubName,
           recordingKey: requirement.recordingKey
@@ -152,7 +156,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       }
       if let initializer = member.decl.as(InitializerDeclSyntax.self) {
         if let requirement = try PreviewableDoubleMemberBuilder.initializerDeclaration(
-          from: initializer, access: access, isolated: isolated, index: index)
+          from: initializer, access: access, isolated: isolated, sendable: sendable, index: index)
         {
           requirementDeclarations.append(requirement)
         }
@@ -172,18 +176,19 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
         (["// Mock values"] + stubDeclarations).joined(separator: "\n")
       )
     }
+    let sharedPreview = sendable && associated.parameters.isEmpty
     sections.append(
       [
         "// Preview value",
-        associated.parameters.isEmpty
+        sharedPreview
           ? "/// The shared double used by previews."
-          : "/// A fresh specialized double for each preview access.",
+          : "/// A fresh double for each preview access.",
         "///",
-        associated.parameters.isEmpty
+        sharedPreview
           ? "/// Instantiated once; configured stubs and recorded calls persist between accesses."
-          : "/// Configure associated responses without defaults before invoking their requirements.",
+          : "/// Keep the returned instance to retain configured stubs and recorded calls.",
         "/// - Important: Use this value only from SwiftUI previews.",
-        associated.parameters.isEmpty
+        sharedPreview
           ? "\(access)nonisolated static let preview = \(doubleName)()"
           : "\(access)nonisolated static var preview: \(doubleName) { \(doubleName)() }",
       ].joined(separator: "\n")
@@ -223,7 +228,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     let body = sections.map { $0.indented(by: 2) }.joined(separator: "\n\n")
     let classSignature =
       "\(access)final class \(doubleName)\(associated.genericClause): "
-      + "\(qualifiedName), @unchecked Sendable\(associated.whereClause)"
+      + "\(qualifiedName)\(sendable ? ", @unchecked Sendable" : "")\(associated.whereClause)"
     let generatedDeclaration = """
       /// A test double for `\(protocolName)`.
       ///
@@ -237,7 +242,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
     let doubleAccessorName = doubleName.lowercasingFirstCharacter
     let previewConfiguration = """
       #if DEBUG
-      /// The shared `\(doubleName)` for SwiftUI preview dependency injection.
+      /// \(sharedPreview ? "The shared" : "A fresh") `\(doubleName)` for SwiftUI preview dependency injection.
       /// - Important: Use this value only from SwiftUI previews.
       @inline(__always)
       \(access)nonisolated var \(doubleAccessorName): \(doubleName) {

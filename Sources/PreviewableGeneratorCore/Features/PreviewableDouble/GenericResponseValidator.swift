@@ -103,12 +103,15 @@ enum GenericResponseValidator {
   ///   - index: Local declarations used to resolve the constraint.
   ///   - scope: Enclosing type names for resolving inherited constraints.
   ///   - visited: Declarations already inspected to prevent recursive lookup.
-  private static func impliesSendable(
+  static func impliesSendable(
     _ type: TypeSyntax,
     index: ModuleIndex,
     scope: [String] = [],
     visited: Set<String> = []
   ) -> Bool {
+    if let attributed = type.as(AttributedTypeSyntax.self) {
+      return impliesSendable(attributed.baseType, index: index, scope: scope, visited: visited)
+    }
     if let composition = type.as(CompositionTypeSyntax.self) {
       return composition.elements.contains {
         impliesSendable($0.type, index: index, scope: scope, visited: visited)
@@ -125,8 +128,14 @@ enum GenericResponseValidator {
       return impliesSendable(alias, index: index, scope: enclosing, visited: next)
     }
     guard let declaration = index.protocols[resolved] else { return false }
-    return (declaration.inheritanceClause?.inheritedTypes ?? []).contains {
+    let inherited = (declaration.inheritanceClause?.inheritedTypes ?? []).contains {
       impliesSendable($0.type, index: index, scope: enclosing, visited: next)
+    }
+    return inherited || (declaration.genericWhereClause?.requirements ?? []).contains {
+      guard case .conformanceRequirement(let constraint) = $0.requirement,
+        constraint.leftType.trimmedDescription == "Self"
+      else { return false }
+      return impliesSendable(constraint.rightType, index: index, scope: enclosing, visited: next)
     }
   }
 }

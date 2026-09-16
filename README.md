@@ -50,7 +50,7 @@ let result = try await serviceDouble.name(for: 42)
 
 Use `<property>Stub` and `<method>Stub` for responses, `<method>ErrorStub` for a persistent error, and `<method>ErrorsStub` for queued errors. `calledMethods` and `passedParameters` record invocations; closure arguments are excluded. Stub access and recording are synchronized. Use a fresh double per test.
 
-Nonisolated doubles require `Sendable` responses and arguments. Protocols and individual requirements retain their global-actor isolation.
+Doubles preserve the protocol's sendability, including inherited `Sendable` conformance. Legacy protocols need no additional conformance: their instance doubles accept non-Sendable arguments, responses, closures, and associated types. Sendable doubles require Sendable values outside actor isolation. Protocols and individual requirements retain their global-actor isolation.
 
 Actor-annotated requirements record arguments in a separate dictionary: `@MainActor` uses `mainActorPassedParameters`, and `@Scope.Context` uses `scope_ContextPassedParameters`. Read these on the corresponding actor. `calledMethods` records all calls.
 
@@ -72,7 +72,7 @@ let result = try await serverDouble.make(for: String.self)
 #expect(result == "ready")
 ```
 
-`make(for:)` keeps the original signature. `makeStub` configures its responses for tests and previews. Each concrete return type needs its own `Sendable` response because the method can return different types. Calling an unconfigured type traps. An explicit optional `nil` counts as configured.
+`make(for:)` keeps the original signature. `makeStub` configures a response for each concrete return type. Sendable doubles use `PreviewableResponses`; legacy instance doubles and actor-isolated requirements use `PreviewableLocalResponses`, which accepts non-Sendable values. Calling an unconfigured type traps. An explicit optional `nil` counts as configured.
 
 ### Overloads, associated types, and subscripts
 
@@ -112,6 +112,8 @@ StoreDouble<String>.withStaticStubs {
 
 Use `await` for asynchronous work. Each scope has fresh synchronized reference state, isolated by concrete double type. Child tasks inherit that state; nested scopes restore it on exit. Detached tasks need their own scope. Access outside a scope traps. Static recordings are available on the double type inside the scope.
 
+Static state is shared across inheriting tasks, so its values must remain Sendable or protected by a global actor, including for legacy protocols.
+
 Concurrent configuration is memory-safe but ordering is unspecified. Configure before spawning child tasks for deterministic responses. Error queues are atomic and FIFO; assignment to concurrent callers depends on scheduling.
 
 ## Model fakes
@@ -148,6 +150,8 @@ Omit `throwing` for a nonthrowing initializer.
 ## Previews and Release builds
 
 Use `ProfileServiceDouble.preview` for a shared preview instance. It retains state between accesses.
+
+Non-Sendable and generic doubles return a fresh instance from `.preview`. The global accessor also returns a fresh instance for non-Sendable doubles. These accessors are nonisolated and require no additional annotations. Keep the returned instance when configuring stubs before injection.
 
 Double classes, stub and spy storage, and fake construction compile only under `#if DEBUG`. Keep `DEBUG` out of Release compilation conditions.
 

@@ -138,6 +138,64 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     print('PASS', name, flush=True)
     return output
 
+  legacy = ('final class Payload { var value = 0 }\n'
+    '@PreviewableDouble protocol Legacy { var payload: Payload? { get set }; '
+    'func store(_ value: Payload) -> Payload?; init(payload: Payload); '
+    'subscript(_ value: Payload) -> Payload? { get set } }')
+  verify('legacy-non-sendable-values', legacy,
+    'let payload = Payload(); let double = LegacyDouble(payload: payload); '
+    'double.payload = payload; double.storeStub = payload; double.subscriptStub = payload; '
+    'precondition(double.payload === payload); precondition(double.store(payload) === payload); '
+    'precondition(double[payload] === payload); double[payload] = payload; '
+    'precondition(double.calledMethods.count == 4)')
+  verify('legacy-release-signatures', legacy, release=True)
+  verify('legacy-fresh-nonisolated-previews', legacy,
+    'nonisolated func check() { let first = LegacyDouble.preview; let second = legacyDouble; '
+    'first.payload = Payload(); precondition(first !== second); precondition(second.payload == nil) }; check()')
+  verify('legacy-main-actor-default', legacy, flags=('-default-isolation', 'MainActor'))
+  verify('legacy-generic-response',
+    'final class Payload {}\n@PreviewableDouble protocol Legacy { func load<Value>(_ type: Value.Type) -> Value }',
+    'let payload = Payload(); let double = LegacyDouble(); double.loadStub.set(payload, for: Payload.self); '
+    'precondition(double.load(Payload.self) === payload)')
+  legacy_generic = ('final class Payload {}\n'
+    '@PreviewableDouble protocol Legacy { func load<Value>(_ type: Value.Type) -> Value }')
+  verify('legacy-generic-optional-nil', legacy_generic,
+    'let double = LegacyDouble(); double.loadStub.set(nil, for: Payload?.self); '
+    'precondition(double.load(Payload?.self) == nil)')
+  verify('legacy-generic-removed-response', legacy_generic,
+    'let double = LegacyDouble(); double.loadStub.set(Payload(), for: Payload.self); '
+    'double.loadStub.remove(for: Payload.self); let _: Payload = double.load(Payload.self)', crashes=True)
+  verify('legacy-generic-main-actor-default', legacy_generic, flags=('-default-isolation', 'MainActor'))
+  verify('actor-isolated-generic-response',
+    'final class Payload {}\n'
+    '@MainActor @PreviewableDouble protocol Legacy { func load<Value>(_ type: Value.Type) -> Value }',
+    '@MainActor func check() { let payload = Payload(); let double = LegacyDouble(); '
+    'double.loadStub.set(payload, for: Payload.self); precondition(double.load(Payload.self) === payload) }; check()')
+  verify('legacy-associated-response',
+    'final class Payload {}\n@PreviewableDouble protocol Legacy<Value> { associatedtype Value; func load() -> Value }',
+    'let payload = Payload(); let double = LegacyDouble<Payload>(); double.loadStub = payload; '
+    'precondition(double.load() === payload)')
+  verify('legacy-nested-protocol',
+    '@PreviewableDouble protocol Child { var value: Int { get set } }\n'
+    '@PreviewableDouble protocol Legacy { var child: any Child { get } }',
+    'let double = LegacyDouble(); precondition(double.child.value == 0)')
+  verify('legacy-closures',
+    'final class Payload { var value = 7 }\ntypealias Callback = (Payload) -> Void\n'
+    '@PreviewableDouble protocol Legacy { var callback: Callback { get set }; '
+    'func observe(_ callback: Callback); init(callback: Callback); func make() -> () -> Payload? }',
+    'let double = LegacyDouble(callback: { _ in }); let payload = Payload(); '
+    'double.callback = { $0.value += 1 }; double.callback(payload); double.observe { _ in }; '
+    'double.makeStub = { payload }; precondition(double.make()() === payload); '
+    'precondition(payload.value == 8); precondition(double.passedParameters["observe(_:)"]?.first?.isEmpty == true)')
+  verify('legacy-double-is-not-sendable', '@PreviewableDouble protocol Legacy {}',
+    'func requireSendable<Value: Sendable>(_ value: Value) {}\nrequireSendable(LegacyDouble())',
+    compile_error='Sendable')
+  for number, inheritance in enumerate([': Sendable', ': Swift.Sendable', ': Base', 'where Self: Sendable']):
+    verify('sendable-shared-preview-' + str(number),
+      'protocol Base: Sendable {}\n@PreviewableDouble protocol Service ' + inheritance + ' {}',
+      'func requireSendable<Value: Sendable>(_ value: Value) {}\n'
+      'requireSendable(ServiceDouble.preview); precondition(ServiceDouble.preview === serviceDouble)')
+
   for condition in ['os(macOS)', 'os(iOS)', 'DEBUG']:
     verify('conditional-requirement-' + condition,
       '@PreviewableDouble protocol Service {\n#if ' + condition + '\nfunc refresh()\n#endif\n}',
@@ -211,14 +269,14 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
   verify('nested-double-alias', 'enum Scope { typealias ServiceDouble = Int }\n@PreviewableDouble protocol Service {}')
   for number, signature in enumerate(['<Value>() -> Value', '<Value: Codable>() -> [Value]']):
     verify('unconstrained-generic-response-' + str(number),
-      '@PreviewableDouble protocol ServiceProtocol { func make' + signature + ' }',
+      '@PreviewableDouble protocol ServiceProtocol: Sendable { func make' + signature + ' }',
       generation_error='requires a Sendable constraint')
   for number, signature in enumerate([
     '<Value: Sendable>() -> Value', '<Value>() -> Value where Value: Swift.Sendable',
     '<Value: Codable & Sendable>() -> [Value]', '<Value: Transferable>() -> Value?',
   ]):
     verify('constrained-generic-response-' + str(number),
-      'protocol Transferable: Sendable {}\n@PreviewableDouble protocol ServiceProtocol { func make' + signature + ' }')
+      'protocol Transferable: Sendable {}\n@PreviewableDouble protocol ServiceProtocol: Sendable { func make' + signature + ' }')
   for actor in ['MainActor', 'Context', 'Scope.Context']:
     actor_source = (
       '@globalActor actor Context { static let shared = Context() }\n'
@@ -257,17 +315,17 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     '@PreviewableDouble protocol ServiceProtocol { @MainActor func store(); var mainActorPassedParameters: Int { get } }',
     generation_error='conflicts with a generated member')
   verify('generic-associated-response-needs-constraint',
-    '@PreviewableDouble protocol ServiceProtocol { func first<T: Collection & Sendable>(_ values: T) -> T.Element }',
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { func first<T: Collection & Sendable>(_ values: T) -> T.Element }',
     generation_error="generic response 'T.Element'")
   verify('generic-associated-response-is-constrained',
-    '@PreviewableDouble protocol ServiceProtocol { '
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { '
     'func first<T: Collection & Sendable>(_ values: T) -> T.Element where T.Element: Sendable }')
   verify('generic-closure-response-needs-sendable',
-    '@PreviewableDouble protocol ServiceProtocol { func make<T: Sendable>(_ value: T) -> () -> T }',
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { func make<T: Sendable>(_ value: T) -> () -> T }',
     generation_error='requires @Sendable')
   for attribute in ['Sendable', 'MainActor']:
     verify('generic-closure-response-' + attribute,
-      '@PreviewableDouble protocol ServiceProtocol { func make<T: Sendable>(_ value: T) -> @' + attribute + ' () -> T }')
+      '@PreviewableDouble protocol ServiceProtocol: Sendable { func make<T: Sendable>(_ value: T) -> @' + attribute + ' () -> T }')
   verify('inherited-requirement-actor',
     'final class Payload {}\nenum Scope {\n'
     '  @globalActor actor Context { static let shared = Context() }\n'
