@@ -2,7 +2,11 @@
 // Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
 //
 
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 import PreviewableGeneratorCore
 

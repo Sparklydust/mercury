@@ -2,7 +2,7 @@
 
 Mercury generates model fakes and protocol doubles for tests and previews.
 
-**Requirements:** Swift 6.4 or later and an Apple Silicon Mac for builds. Deployment targets: iOS 16, macOS 13, tvOS 26, visionOS 26, and watchOS 26 or later.
+**Requirements:** Swift 6.4 or later on an Apple Silicon Mac or Linux. Apple deployment targets: iOS 16, macOS 13, tvOS 26, visionOS 26, and watchOS 26 or later.
 
 ## Setup
 
@@ -28,6 +28,8 @@ Add both the library and build plugin to each target that uses the macros:
 ```
 
 Import `Mercury` in annotated source files.
+
+Linux automatically builds the generator and macros from source and uses Swift Crypto for hashing. The library, build plugin, annotations, and Debug doubles use the same setup on both platforms. Apple Silicon Macs continue using the bundled tools by default.
 
 ## Dependency doubles
 
@@ -179,7 +181,7 @@ Unsupported construction produces a diagnostic on the annotated declaration.
 
 ## Development
 
-Run `swift test` locally. CI also verifies bundled tools and generated consumers, runs tests with Thread Sanitizer, and builds Release.
+Run `swift test` locally. macOS CI also verifies bundled tools and generated consumers, runs tests with Thread Sanitizer, and builds Release. Linux CI tests source-built tools, generated consumers, and Release compilation.
 
 ### Updating bundled tools
 

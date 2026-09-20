@@ -4,7 +4,12 @@ import CompilerPluginSupport
 import Foundation
 import PackageDescription
 
+#if os(Linux)
+// Bundled tools target macOS; Linux builds the same generator and macros from source.
+let buildGeneratorFromSource = true
+#else
 let buildGeneratorFromSource = ProcessInfo.processInfo.environment["MERCURY_BUILD_GENERATOR_FROM_SOURCE"] == "1"
+#endif
 let buildToolArtifacts = ProcessInfo.processInfo.environment["MERCURY_BUILD_TOOL_ARTIFACTS"] == "1"
 let macroSourceDependencies: [Target.Dependency] = [
   .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
@@ -26,6 +31,7 @@ let package = Package(
     .plugin(name: "PreviewableBuildToolPlugin", targets: ["PreviewableBuildToolPlugin"])
   ],
   dependencies: [
+    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
     .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "603.0.0")
   ],
   targets: [
@@ -43,11 +49,18 @@ let package = Package(
     .target(
       name: "PreviewableGeneratorCore",
       dependencies: [
+        .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
         .product(name: "SwiftParser", package: "swift-syntax"),
         .product(name: "SwiftSyntax", package: "swift-syntax")
       ]
     ),
-    .executableTarget(name: "PreviewableGenerator", dependencies: ["PreviewableGeneratorCore"]),
+    .executableTarget(
+      name: "PreviewableGenerator",
+      dependencies: [
+        "PreviewableGeneratorCore",
+        .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux]))
+      ]
+    ),
     .plugin(
       name: "PreviewableBuildToolPlugin",
       capability: .buildTool(),

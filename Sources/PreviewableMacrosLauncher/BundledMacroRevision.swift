@@ -3,4 +3,4 @@
 //
 
 /// Identifies the bundled macro implementation and invalidates consumers when it changes.
-let bundledMacroRevision = "a46e8a577eb40d8e0fab5193719f57751079f5be534339837603917be50865e4"
+let bundledMacroRevision = "a1a057d82a9008d1f9d43fe7e393de843b708e23a2a271bebb3545f96e58b95b"

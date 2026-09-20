@@ -37,7 +37,9 @@ def require_success(result, name):
 with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
   root = Path(directory)
   # Match Package.swift rather than swiftc's deployment target for the build host.
-  compiler = [args.swiftc, '-swift-version', '6', '-target', f'{platform.machine()}-apple-macosx27.0']
+  compiler = [args.swiftc, '-swift-version', '6']
+  if platform.system() == 'Darwin':
+    compiler += ['-target', f'{platform.machine()}-apple-macosx27.0']
   base = compiler + ['-I', str(modules),
     '-module-cache-path', str(root / 'cache'),
     '-load-plugin-executable', f'{plugin}#PreviewableMacrosPlugin']
@@ -479,8 +481,9 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
 
   domain = root / 'Domain.swift'
   domain.write_text('public struct Token: Sendable { public let value: Int; public init(value: Int) throws { self.value = value } }')
+  library = 'libDomain.dylib' if platform.system() == 'Darwin' else 'libDomain.so'
   require_success(run(compiler + ['-emit-module', '-emit-library', '-module-name', 'Domain',
-    str(domain), '-o', str(root / 'libDomain.dylib'), '-emit-module-path', str(root / 'Domain.swiftmodule'),
+    str(domain), '-o', str(root / library), '-emit-module-path', str(root / 'Domain.swiftmodule'),
     '-module-cache-path', str(root / 'cache')]), 'external module')
   base += ['-I', str(root), '-L', str(root), '-lDomain', '-Xlinker', '-rpath', '-Xlinker', str(root)]
   external = 'import Domain\n@PreviewableFake(parameters: [("value", Int.self)], throwing: true) extension Token {}\n@PreviewableFake struct Model { let token: Token }'
