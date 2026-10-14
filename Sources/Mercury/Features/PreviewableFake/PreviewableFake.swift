@@ -15,9 +15,9 @@ import Foundation
 /// Every generated parameter has an automatic default; unsupported construction produces a source diagnostic.
 @attached(peer)
 public macro PreviewableFake() = #externalMacro(
-    module: "PreviewableMacrosPlugin",
-    type: "PreviewableFakeMacro"
-  )
+  module: "PreviewableMacrosPlugin",
+  type: "PreviewableFakeMacro"
+)
 
 /// Marks an extension of a type declared outside this module for fake-factory generation.
 ///
@@ -40,6 +40,6 @@ public macro PreviewableFake(
   parameters: [(String, Any.Type)],
   throwing: Bool = false
 ) = #externalMacro(
-    module: "PreviewableMacrosPlugin",
-    type: "PreviewableFakeMacro"
-  )
+  module: "PreviewableMacrosPlugin",
+  type: "PreviewableFakeMacro"
+)
