@@ -24,13 +24,24 @@ struct PreviewableFakeMacro: PeerMacro {
     providingPeersOf declaration: some DeclSyntaxProtocol,
     in context: some MacroExpansionContext
   ) throws -> [DeclSyntax] {
-    let declaresParameters: Bool
-    if case .argumentList(let arguments) = node.arguments {
-      declaresParameters = !arguments.isEmpty
-    } else {
-      declaresParameters = node.arguments != nil
-    }
+    try validate(declaration, declaresParameters: declaresParameters(in: node))
 
+    _ = context
+    return []
+  }
+}
+
+private extension PreviewableFakeMacro {
+
+  static func declaresParameters(in node: AttributeSyntax) -> Bool {
+    if case .argumentList(let arguments) = node.arguments {
+      return !arguments.isEmpty
+    } else {
+      return node.arguments != nil
+    }
+  }
+
+  static func validate(_ declaration: some DeclSyntaxProtocol, declaresParameters: Bool) throws {
     if let extensionDeclaration = declaration.as(ExtensionDeclSyntax.self) {
       try validate(extensionDeclaration, declaresParameters: declaresParameters)
     } else if declaration.is(StructDeclSyntax.self) || declaration.is(ClassDeclSyntax.self) {
@@ -50,16 +61,10 @@ struct PreviewableFakeMacro: PeerMacro {
         """
       )
     }
-
-    _ = context
-    return []
   }
-}
-
-extension PreviewableFakeMacro {
 
   /// Validates an extension the generator has to take on trust, having never read the extended type.
-  fileprivate static func validate(
+  static func validate(
     _ declaration: ExtensionDeclSyntax,
     declaresParameters: Bool
   ) throws {

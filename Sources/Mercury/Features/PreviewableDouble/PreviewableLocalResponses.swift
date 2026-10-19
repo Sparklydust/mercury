@@ -37,8 +37,11 @@ public final class PreviewableLocalResponses {
     }
     return response.value
   }
+}
 
-  private struct Response<Value> {
+private extension PreviewableLocalResponses {
+
+  struct Response<Value> {
     let value: Value
   }
 }

@@ -15,7 +15,21 @@ enum PreviewableGenerator {
     let arguments = Array(CommandLine.arguments.dropFirst())
     guard let outputPath = arguments.first else { throw GeneratorCommandError.missingOutputPath }
 
-    let inputs = Array(arguments.dropFirst())
+    let paths = try inputPaths(from: Array(arguments.dropFirst()))
+    let files = try sourceFiles(at: paths)
+    let cacheURL = URL(fileURLWithPath: outputPath + ".cache.json")
+    let executable = Bundle.main.executableURL?.path ?? CommandLine.arguments[0]
+    let inputDigest = try PreviewableGenerationCache.fingerprint(files: files, executable: executable)
+    let previous = try? String(contentsOfFile: outputPath, encoding: .utf8)
+    if isCached(previous, at: cacheURL, inputDigest: inputDigest) { return }
+    let generated = try PreviewableSourceGenerator.generate(from: files)
+    try write(generated, to: outputPath, previous: previous, cacheURL: cacheURL, inputDigest: inputDigest)
+  }
+}
+
+private extension PreviewableGenerator {
+
+  static func inputPaths(from inputs: [String]) throws -> [String] {
     let paths: [String]
     if inputs.first == "--input-file-list" {
       guard inputs.count == 2 else { throw GeneratorCommandError.missingInputFileList }
@@ -23,20 +37,28 @@ enum PreviewableGenerator {
     } else {
       paths = inputs
     }
-    let files = try paths.sorted().map {
+    return paths
+  }
+
+  static func sourceFiles(at paths: [String]) throws -> [PreviewableSourceFile] {
+    try paths.sorted().map {
       PreviewableSourceFile(path: $0, text: try String(contentsOfFile: $0, encoding: .utf8))
     }
-    let cacheURL = URL(fileURLWithPath: outputPath + ".cache.json")
-    let executable = Bundle.main.executableURL?.path ?? CommandLine.arguments[0]
-    let inputDigest = try PreviewableGenerationCache.fingerprint(files: files, executable: executable)
-    let previous = try? String(contentsOfFile: outputPath, encoding: .utf8)
+  }
+
+  static func isCached(_ previous: String?, at cacheURL: URL, inputDigest: String) -> Bool {
     if let previous, let data = try? Data(contentsOf: cacheURL),
       let cache = try? JSONDecoder().decode(PreviewableGenerationCache.self, from: data),
       cache.inputs == inputDigest, cache.output == PreviewableGenerationCache.fingerprint(previous)
     {
-      return
+      return true
     }
-    let generated = try PreviewableSourceGenerator.generate(from: files)
+    return false
+  }
+
+  static func write(
+    _ generated: String, to outputPath: String, previous: String?, cacheURL: URL, inputDigest: String
+  ) throws {
     // Preserve the modification time so an unchanged declaration does not invalidate consumer compilation.
     if previous != generated {
       try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)

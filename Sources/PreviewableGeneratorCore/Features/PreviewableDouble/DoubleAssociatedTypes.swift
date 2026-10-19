@@ -25,7 +25,11 @@ struct DoubleAssociatedTypes {
   ///   - sendable: Whether instances must support transfer between isolation domains.
   /// - Throws: For recursive associated-type bindings.
   init(
-    declaration: ProtocolDeclSyntax, members: [MemberBlockItemSyntax], index: ModuleIndex, isolated: Bool, sendable: Bool
+    declaration: ProtocolDeclSyntax,
+    members: [MemberBlockItemSyntax],
+    index: ModuleIndex,
+    isolated: Bool,
+    sendable: Bool
   ) throws {
     let associated = members.compactMap { $0.decl.as(AssociatedTypeDeclSyntax.self) }
     let names = Set(associated.map(\.name.text))

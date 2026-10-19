@@ -30,8 +30,7 @@ public enum PreviewableStaticScope {
   public static func withState<State: AnyObject & Sendable, Result>(
     for type: Any.Type, state: State, operation: () throws -> Result
   ) rethrows -> Result {
-    var bindings = states
-    bindings[ObjectIdentifier(type)] = state
+    let bindings = bindings(for: type, state: state)
     return try $states.withValue(bindings, operation: operation)
   }
 
@@ -44,26 +43,16 @@ public enum PreviewableStaticScope {
   public nonisolated(nonsending) static func withState<State: AnyObject & Sendable, Result>(
     for type: Any.Type, state: State, operation: nonisolated(nonsending) () async throws -> Result
   ) async rethrows -> Result {
-    var bindings = states
-    bindings[ObjectIdentifier(type)] = state
+    let bindings = bindings(for: type, state: state)
     return try await $states.withValue(bindings, operation: operation)
   }
 }
 
-/// Distinguishes an unconfigured response from a configured optional nil.
-@_spi(Generated)
-public enum PreviewableValue<Value> {
-  case unconfigured
-  case configured(Value)
+private extension PreviewableStaticScope {
 
-  /// Returns the configured response or identifies the stub that needs configuration.
-  /// - Parameter name: The generated stub name reported on failure.
-  public func require(_ name: String) -> Value {
-    guard case .configured(let value) = self else {
-      preconditionFailure("Missing Previewable response for \(name)")
-    }
-    return value
+  static func bindings<State: AnyObject & Sendable>(for type: Any.Type, state: State) -> [ObjectIdentifier: any Sendable] {
+    var bindings = states
+    bindings[ObjectIdentifier(type)] = state
+    return bindings
   }
 }
-
-extension PreviewableValue: Sendable where Value: Sendable {}

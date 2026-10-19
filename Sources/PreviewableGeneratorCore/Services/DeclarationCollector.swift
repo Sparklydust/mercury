@@ -128,7 +128,7 @@ final class DeclarationCollector: SyntaxVisitor {
   }
 }
 
-extension DeclarationCollector {
+private extension DeclarationCollector {
 
   /// Records names outside member blocks, functions, and closures, including conditional file-scope declarations.
   /// - Parameters:
@@ -153,7 +153,7 @@ extension DeclarationCollector {
   ///   - modifiers: The declared access modifiers.
   ///   - isGeneric: Whether the type declares generic parameters.
   ///   - declaration: The declaration retained for feature generation.
-  fileprivate func visitNominal(
+  func visitNominal(
     node: some SyntaxProtocol,
     name: String,
     attributes: AttributeListSyntax,
@@ -184,7 +184,7 @@ extension DeclarationCollector {
   ///   - node: The protocol syntax retained for requirement lookup.
   ///   - name: The unqualified protocol name.
   ///   - position: The lexical scope used to qualify the name.
-  fileprivate func register(
+  func register(
     protocol node: ProtocolDeclSyntax,
     named name: String,
     at position: LexicalPosition
@@ -205,7 +205,7 @@ extension DeclarationCollector {
   ///   - name: The declaration name used in diagnostics.
   ///   - position: The declaration's lexical scope or unsupported location.
   ///   - node: The syntax node that determines the diagnostic offset.
-  fileprivate func record(
+  func record(
     _ annotated: (annotation: PreviewableAnnotation, attribute: AttributeSyntax),
     declaration: DeclSyntax,
     name: String,
@@ -229,19 +229,19 @@ extension DeclarationCollector {
   /// - Parameters:
   ///   - name: The declaration's written name.
   ///   - position: The enclosing type scope, when supported.
-  fileprivate static func keys(for name: String, at position: LexicalPosition) -> [String] {
+  static func keys(for name: String, at position: LexicalPosition) -> [String] {
     let qualifiedName = qualifiedName(for: name, at: position)
     return [qualifiedName]
   }
 
   /// Returns the declaration name prefixed by its enclosing types, as the generated file must spell it.
-  fileprivate static func qualifiedName(for name: String, at position: LexicalPosition) -> String {
+  static func qualifiedName(for name: String, at position: LexicalPosition) -> String {
     guard case .emittable(let qualifier) = position, !qualifier.isEmpty else { return name }
     return (qualifier + [name]).joined(separator: ".")
   }
 
   /// Returns the first case that carries no associated value, wherever it appears in the declaration.
-  fileprivate static func firstParameterlessCase(in node: EnumDeclSyntax) -> String? {
+  static func firstParameterlessCase(in node: EnumDeclSyntax) -> String? {
     for member in node.memberBlock.members {
       guard let caseDeclaration = member.decl.as(EnumCaseDeclSyntax.self) else { continue }
       for element in caseDeclaration.elements where element.parameterClause == nil {
@@ -255,7 +255,7 @@ extension DeclarationCollector {
   ///
   /// The attribute travels with the annotation because arguments such as `parameters:` are the generator's only
   /// description of a type it cannot read, and interpreting them belongs with generation rather than collection.
-  fileprivate static func annotation(
+  static func annotation(
     in attributes: AttributeListSyntax
   ) -> (annotation: PreviewableAnnotation, attribute: AttributeSyntax)? {
     for element in attributes {
@@ -270,7 +270,7 @@ extension DeclarationCollector {
   }
 
   /// Walks the parent chain to decide whether a declaration can be emitted, and under which enclosing types.
-  fileprivate static func lexicalPosition(of node: some SyntaxProtocol) -> LexicalPosition {
+  static func lexicalPosition(of node: some SyntaxProtocol) -> LexicalPosition {
     var qualifier: [String] = []
     var current = node.parent
 
