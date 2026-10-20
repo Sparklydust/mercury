@@ -19,7 +19,10 @@ struct PreviewableDoubleDiagnosticsTests {
 
     let result = generatorDiagnosticMessage(for: source)
 
-    #expect(result?.contains("conditional requirements in 'Service'") == true, "Conditional witnesses cannot be omitted.")
+    #expect(
+      result?.contains("conditional requirements in 'Service'") == true,
+      "Conditional witnesses cannot be omitted."
+    )
   }
 
   @Test
@@ -35,7 +38,10 @@ struct PreviewableDoubleDiagnosticsTests {
 
     let result = generatorDiagnosticMessage(for: source)
 
-    #expect(result?.contains("conditional requirements in 'Base'") == true, "Inherited conditional requirements must fail.")
+    #expect(
+      result?.contains("conditional requirements in 'Base'") == true,
+      "Inherited conditional requirements must fail."
+    )
   }
 
   @Test(arguments: [
@@ -134,7 +140,7 @@ struct PreviewableDoubleDiagnosticsTests {
       protocol ServiceProtocol { func load(_: Int) }
       """,
       "requires a named local parameter"
-    ),
+    )
   ])
   func generator_declarationIsUnsupported_diagnosticNamesTheFix(
     _ source: String,

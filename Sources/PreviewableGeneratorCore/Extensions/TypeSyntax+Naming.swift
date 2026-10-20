@@ -13,10 +13,12 @@ extension TypeSyntax {
   /// re-parsing the base inside a throwaway declaration is what bridges the two.
   static func parsed(from text: String) -> TypeSyntax? {
     let tree = Parser.parse(source: "var member: \(text)")
+
     guard !tree.hasError,
-      let variable = tree.statements.first?.item.as(VariableDeclSyntax.self),
-      let type = variable.bindings.first?.typeAnnotation?.type
+          let variable = tree.statements.first?.item.as(VariableDeclSyntax.self),
+          let type = variable.bindings.first?.typeAnnotation?.type
     else { return .none }
+
     return type
   }
 
@@ -24,10 +26,10 @@ extension TypeSyntax {
   ///
   /// A non-escaping closure cannot be stored, so a function-typed argument is never recorded.
   var isFunctionType: Bool {
-    if let attributed = self.as(AttributedTypeSyntax.self) {
-      return attributed.baseType.isFunctionType
-    }
-    return self.is(FunctionTypeSyntax.self)
+    guard let attributed = self.as(AttributedTypeSyntax.self)
+    else { return self.is(FunctionTypeSyntax.self) }
+
+    return attributed.baseType.isFunctionType
   }
 
   /// Whether the type uses `T?` or `T!` syntax; generic `Optional<T>` syntax is excluded.
@@ -47,21 +49,31 @@ extension TypeSyntax {
   }
 
   /// Nominal references preserving qualification and including nested generic arguments.
-  var qualifiedTypeNames: Set<String> {
-    func nominalName(_ type: TypeSyntax) -> String? {
-      if let identifier = type.as(IdentifierTypeSyntax.self) { return identifier.name.text }
-      if let member = type.as(MemberTypeSyntax.self), let base = nominalName(member.baseType) {
-        return base + "." + member.name.text
-      }
-      return nil
+  var qualifiedTypeNames: Set<String> { references(in: Syntax(self)) }
+
+  private func nominalName(_ type: TypeSyntax) -> String? {
+    if let identifier = type.as(IdentifierTypeSyntax.self) {
+      return identifier.name.text
     }
-    func references(in node: Syntax) -> Set<String> {
-      var names: Set<String> = []
-      if let type = node.as(TypeSyntax.self), let name = nominalName(type) { names.insert(name) }
-      for child in node.children(viewMode: .sourceAccurate) { names.formUnion(references(in: child)) }
-      return names
+
+    guard let member = type.as(MemberTypeSyntax.self),
+          let base = nominalName(member.baseType)
+    else { return nil }
+
+    return base + "." + member.name.text
+  }
+
+  private func references(in node: Syntax) -> Set<String> {
+    var names: Set<String> = []
+
+    if let type = node.as(TypeSyntax.self), let name = nominalName(type) {
+      names.insert(name)
     }
-    return references(in: Syntax(self))
+
+    for child in node.children(viewMode: .sourceAccurate) {
+      names.formUnion(references(in: child))
+    }
+    return names
   }
 
   /// Whether the type refers to the conforming type rather than a named one.

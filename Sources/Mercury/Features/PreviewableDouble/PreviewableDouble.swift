@@ -23,8 +23,7 @@ import Foundation
 /// Nongeneric Sendable doubles have shared previews. Legacy and generic doubles provide fresh `.preview` instances.
 /// Preview accessors are nonisolated; retain a fresh instance when configuring it before injection.
 @attached(peer, names: suffixed(Double))
-public macro PreviewableDouble() =
-  #externalMacro(
-    module: "PreviewableMacrosPlugin",
-    type: "PreviewableDoubleMacro"
-  )
+public macro PreviewableDouble() = #externalMacro(
+  module: "PreviewableMacrosPlugin",
+  type: "PreviewableDoubleMacro"
+)

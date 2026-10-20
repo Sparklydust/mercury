@@ -21,7 +21,7 @@ enum PreviewableGenerator {
     let executable = Bundle.main.executableURL?.path ?? CommandLine.arguments[0]
     let inputDigest = try PreviewableGenerationCache.fingerprint(files: files, executable: executable)
     let previous = try? String(contentsOfFile: outputPath, encoding: .utf8)
-    if isCached(previous, at: cacheURL, inputDigest: inputDigest) { return }
+    guard !isCached(previous, at: cacheURL, inputDigest: inputDigest) else { return }
     let generated = try PreviewableSourceGenerator.generate(from: files)
     try write(generated, to: outputPath, previous: previous, cacheURL: cacheURL, inputDigest: inputDigest)
   }
@@ -30,14 +30,9 @@ enum PreviewableGenerator {
 private extension PreviewableGenerator {
 
   static func inputPaths(from inputs: [String]) throws -> [String] {
-    let paths: [String]
-    if inputs.first == "--input-file-list" {
-      guard inputs.count == 2 else { throw GeneratorCommandError.missingInputFileList }
-      paths = try JSONDecoder().decode([String].self, from: Data(contentsOf: URL(fileURLWithPath: inputs[1])))
-    } else {
-      paths = inputs
-    }
-    return paths
+    guard inputs.first == "--input-file-list" else { return inputs }
+    guard inputs.count == 2 else { throw GeneratorCommandError.missingInputFileList }
+    return try JSONDecoder().decode([String].self, from: Data(contentsOf: URL(fileURLWithPath: inputs[1])))
   }
 
   static func sourceFiles(at paths: [String]) throws -> [PreviewableSourceFile] {
@@ -46,24 +41,34 @@ private extension PreviewableGenerator {
     }
   }
 
-  static func isCached(_ previous: String?, at cacheURL: URL, inputDigest: String) -> Bool {
-    if let previous, let data = try? Data(contentsOf: cacheURL),
-      let cache = try? JSONDecoder().decode(PreviewableGenerationCache.self, from: data),
-      cache.inputs == inputDigest, cache.output == PreviewableGenerationCache.fingerprint(previous)
-    {
-      return true
-    }
-    return false
+  static func isCached(
+    _ previous: String?,
+    at cacheURL: URL,
+    inputDigest: String
+  ) -> Bool {
+    guard let previous, let data = try? Data(contentsOf: cacheURL),
+          let cache = try? JSONDecoder().decode(PreviewableGenerationCache.self, from: data),
+          cache.inputs == inputDigest, cache.output == PreviewableGenerationCache.fingerprint(previous)
+    else { return false }
+
+    return true
   }
 
   static func write(
-    _ generated: String, to outputPath: String, previous: String?, cacheURL: URL, inputDigest: String
+    _ generated: String,
+    to outputPath: String,
+    previous: String?,
+    cacheURL: URL,
+    inputDigest: String
   ) throws {
     // Preserve the modification time so an unchanged declaration does not invalidate consumer compilation.
     if previous != generated {
       try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
     }
-    let cache = PreviewableGenerationCache(inputs: inputDigest, output: PreviewableGenerationCache.fingerprint(generated))
+    let cache = PreviewableGenerationCache(
+      inputs: inputDigest,
+      output: PreviewableGenerationCache.fingerprint(generated)
+    )
     try JSONEncoder().encode(cache).write(to: cacheURL, options: .atomic)
   }
 }

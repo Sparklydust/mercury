@@ -17,7 +17,8 @@ struct StoredProperty {
 
   /// The property name with Swift keywords escaped for labels and local references.
   var escapedName: String {
-    guard case .keyword = Parser.parse(source: name).firstToken(viewMode: .sourceAccurate)?.tokenKind else { return name }
+    guard case .keyword = Parser.parse(source: name).firstToken(viewMode: .sourceAccurate)?.tokenKind
+    else { return name }
     return "`\(name)`"
   }
 }

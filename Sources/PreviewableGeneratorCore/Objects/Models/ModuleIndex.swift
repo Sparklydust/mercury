@@ -42,12 +42,17 @@ struct ModuleIndex {
   ///   - name: The written type or protocol name to resolve.
   ///   - scope: Enclosing type names ordered from outermost to innermost.
   /// - Returns: The first indexed qualified name, or `nil` if no candidate is indexed.
-  func resolve(_ name: String, scope: [String]) -> String? {
+  func resolve(
+    _ name: String,
+    scope: [String]
+  ) -> String? {
     for count in stride(from: scope.count, through: 0, by: -1) {
       let candidate = (Array(scope.prefix(count)) + [name]).joined(separator: ".")
-      if declaredTypes.contains(candidate) || protocols[candidate] != nil || fakeAnnotatedTypes.contains(candidate)
-        || typeAliases[candidate] != nil
-      {
+
+      if declaredTypes.contains(candidate)
+         || protocols[candidate] != nil
+         || fakeAnnotatedTypes.contains(candidate)
+         || typeAliases[candidate] != nil {
         return candidate
       }
     }

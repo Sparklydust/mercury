@@ -22,7 +22,6 @@ struct PreviewableDoubleMacro: PeerMacro {
   ) throws -> [DeclSyntax] {
     guard declaration.is(ProtocolDeclSyntax.self)
     else { throw PreviewableMacroError.message("@PreviewableDouble can only be applied to a protocol") }
-
     _ = node
     return []
   }

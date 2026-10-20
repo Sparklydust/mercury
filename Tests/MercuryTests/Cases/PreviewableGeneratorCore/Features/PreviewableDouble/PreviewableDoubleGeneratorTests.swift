@@ -38,7 +38,7 @@ struct PreviewableDoubleGeneratorTests {
     "passedParameters[#function, default: []].append([id])",
     "/// The shared `ServiceDouble` for SwiftUI preview dependency injection.",
     "nonisolated var serviceDouble: ServiceDouble",
-    "serviceDouble is unavailable outside Debug builds and SwiftUI previews",
+    "serviceDouble is unavailable outside Debug builds and SwiftUI previews"
   ])
   func generator_protocolIsAnnotated_expectedDoubleMemberIsGenerated(
     _ expected: String
@@ -54,7 +54,7 @@ struct PreviewableDoubleGeneratorTests {
   @Test(arguments: [
     "servicePreview",
     "func serviceDouble(",
-    "func previewable()",
+    "func previewable()"
   ])
   func generator_protocolIsAnnotated_obsoleteAPIIsNotGenerated(
     _ forbidden: String
@@ -91,7 +91,7 @@ struct PreviewableDoubleGeneratorTests {
     "<Value>() -> Value where Value: Swift.Sendable",
     "<Value: Codable & Sendable>() -> [Value]",
     "<Value: Transferable>() -> Value?",
-    "<Value: ResponseConstraint>() -> Value",
+    "<Value: ResponseConstraint>() -> Value"
   ])
   func generator_genericResponseIsSendable_responseStoreIsGenerated(_ signature: String) throws {
     let source = """
@@ -99,7 +99,7 @@ struct PreviewableDoubleGeneratorTests {
       typealias ResponseConstraint = Transferable
       @PreviewableDouble protocol ServiceProtocol: Sendable { func make\(signature) }
       """
-    let expected = "let makeStub = PreviewableResponses()"
+    let expected = "let makeStub: PreviewableResponses = PreviewableResponses()"
 
     let result = try PreviewableSourceGenerator.generate(from: [source])
 
@@ -110,7 +110,7 @@ struct PreviewableDoubleGeneratorTests {
     "identifierStub: UUID = UUID()",
     "var identifier: UUID { identifierStub }",
     "func reset()",
-    "nameStub: String = .init()",
+    "nameStub: String = .init()"
   ])
   func generator_protocolInheritsInModuleProtocol_requirementsAreFlattened(
     _ expected: String
@@ -140,7 +140,7 @@ struct PreviewableDoubleGeneratorTests {
 
   @Test(arguments: [
     ("func map(_ transform: () throws -> Int) rethrows -> Int {", true),
-    ("mapErrorStub", false),
+    ("mapErrorStub", false)
   ])
   func generator_requirementRethrows_signatureAndErrorStorageMatchContract(
     _ fragment: String,
@@ -171,11 +171,12 @@ struct PreviewableDoubleGeneratorTests {
       }
       """
     ]
+    let expected = "var loadErrorStub: (MappingError)?"
 
     let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
-      result.contains("var loadErrorStub: (MappingError)?"),
+      result.contains(expected),
       "A typed `throws` requirement cannot throw an `any Error`, so the stub must carry the thrown type."
     )
   }
@@ -244,7 +245,7 @@ struct PreviewableDoubleGeneratorTests {
 
   @Test(arguments: [
     "nonisolated var serviceDouble: ServiceDouble",
-    "nonisolated var serviceDouble: any ServiceProtocol",
+    "nonisolated var serviceDouble: any ServiceProtocol"
   ])
   func generator_doubleIsGenerated_accessorHasConfigurationSpecificType(_ expected: String) throws {
     let source = "@PreviewableDouble\nprotocol ServiceProtocol { var name: String { get set } }"
@@ -287,7 +288,9 @@ struct PreviewableDoubleGeneratorTests {
     let result = try PreviewableSourceGenerator.generate(from: [source])
 
     #expect(
-      result.contains(expected), "Qualified standard marker protocols must not require module-local declarations.")
+      result.contains(expected),
+      "Qualified standard marker protocols must not require module-local declarations."
+    )
   }
 
   @Test

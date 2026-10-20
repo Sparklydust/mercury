@@ -43,6 +43,7 @@ enum PreviewableSourceAssembler {
   /// Includes imports from unannotated files because inherited requirements may use their types.
   private static func importedModules(in trees: [SourceFileSyntax]) -> [String] {
     var imports: Set<String> = ["import Foundation", "@_spi(Generated) import Mercury"]
+
     for tree in trees {
       imports.formUnion(importsOnly(tree.statements))
     }
@@ -54,11 +55,14 @@ enum PreviewableSourceAssembler {
   /// - Parameter statements: Source statements to inspect recursively.
   private static func importsOnly(_ statements: CodeBlockItemListSyntax) -> [String] {
     statements.compactMap { statement in
-      if let declaration = statement.item.as(ImportDeclSyntax.self) { return declaration.trimmedDescription }
+      if let declaration = statement.item.as(ImportDeclSyntax.self) {
+        return declaration.trimmedDescription
+      }
       guard let conditional = statement.item.as(IfConfigDeclSyntax.self) else { return nil }
       var containsImport = false
       let clauses = conditional.clauses.map { clause in
         let content: [String]
+
         if case .statements(let statements)? = clause.elements {
           content = importsOnly(statements)
         } else {
@@ -68,6 +72,7 @@ enum PreviewableSourceAssembler {
         let condition = clause.condition.map { " " + $0.trimmedDescription } ?? ""
         return clause.poundKeyword.text + condition + "\n" + content.joined(separator: "\n")
       }
+
       return containsImport ? clauses.joined(separator: "\n") + "\n#endif" : nil
     }
   }

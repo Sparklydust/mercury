@@ -16,15 +16,17 @@ enum PreviewableStoredPropertyCollector {
     in members: MemberBlockItemListSyntax
   ) throws -> [StoredProperty] {
     var properties: [StoredProperty] = []
+
     for member in members {
       guard let variable = member.decl.as(VariableDeclSyntax.self),
-        !variable.modifiers.isStatic
+            !variable.modifiers.isStatic
       else { continue }
 
       let isHidden = variable.modifiers.isFileScoped
+
       for binding in variable.bindings {
         guard isStored(binding),
-          let identifier = binding.pattern.as(IdentifierPatternSyntax.self)
+              let identifier = binding.pattern.as(IdentifierPatternSyntax.self)
         else { continue }
 
         let isMutable = variable.bindingSpecifier.tokenKind == .keyword(.var)
@@ -58,16 +60,19 @@ enum PreviewableStoredPropertyCollector {
   static func firstPropertyWithoutInitialValue(in members: MemberBlockItemListSyntax) -> String? {
     for member in members {
       guard let variable = member.decl.as(VariableDeclSyntax.self),
-        !variable.modifiers.isStatic
+            !variable.modifiers.isStatic
       else { continue }
+
       let isMutable = variable.bindingSpecifier.tokenKind == .keyword(.var)
+
       for binding in variable.bindings {
         guard isStored(binding),
-          binding.initializer == .none,
-          let identifier = binding.pattern.as(IdentifierPatternSyntax.self)
+              binding.initializer == .none,
+              let identifier = binding.pattern.as(IdentifierPatternSyntax.self)
         else { continue }
         // Only a mutable optional is implicitly `nil`.
         let isNilDefaulted = binding.typeAnnotation.map(\.type.isOptional) ?? false
+
         guard !(isMutable && isNilDefaulted) else { continue }
         return identifier.identifier.text
       }
@@ -78,14 +83,19 @@ enum PreviewableStoredPropertyCollector {
   /// Returns an explicit type or infers one from a direct call name or supported scalar literal.
   /// - Parameter binding: The stored property binding to inspect.
   private static func inferredType(from binding: PatternBindingSyntax) -> TypeSyntax? {
-    if let type = binding.typeAnnotation?.type { return type }
+    if let type = binding.typeAnnotation?.type {
+      return type
+    }
+
     guard let initializer = binding.initializer?.value else { return .none }
+
     if let call = initializer.as(FunctionCallExprSyntax.self),
-      let reference = call.calledExpression.as(DeclReferenceExprSyntax.self)
-    {
+       let reference = call.calledExpression.as(DeclReferenceExprSyntax.self) {
       return TypeSyntax(IdentifierTypeSyntax(name: .identifier(reference.baseName.text)))
     }
+
     let inferred: String?
+
     switch initializer.kind {
     case .stringLiteralExpr: inferred = "String"
     case .booleanLiteralExpr: inferred = "Bool"
@@ -93,6 +103,7 @@ enum PreviewableStoredPropertyCollector {
     case .integerLiteralExpr: inferred = "Int"
     default: inferred = .none
     }
+
     return inferred.map { TypeSyntax(IdentifierTypeSyntax(name: .identifier($0))) }
   }
 

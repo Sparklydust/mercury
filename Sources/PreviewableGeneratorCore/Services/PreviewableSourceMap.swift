@@ -14,7 +14,10 @@ struct PreviewableSourceMap {
   /// - Parameters:
   ///   - files: The module's source files, with the paths reported in diagnostics.
   ///   - trees: Their parsed syntax, in the same order — the two stay index-parallel.
-  init(files: [PreviewableSourceFile], trees: [SourceFileSyntax]) {
+  init(
+    files: [PreviewableSourceFile],
+    trees: [SourceFileSyntax]
+  ) {
     self.files = files
     converters = zip(files, trees).map {
       SourceLocationConverter(fileName: $0.path, tree: $1)
@@ -45,7 +48,10 @@ struct PreviewableSourceMap {
   /// - Parameters:
   ///   - message: The validation failure to report.
   ///   - annotation: The declaration whose location identifies the failure.
-  func diagnostic(_ message: String, for annotation: AnnotatedDeclaration) -> PreviewableDiagnostic {
+  func diagnostic(
+    _ message: String,
+    for annotation: AnnotatedDeclaration
+  ) -> PreviewableDiagnostic {
     let converter = converters[annotation.fileIndex]
     let location = converter.location(for: annotation.absolutePosition)
     return PreviewableDiagnostic(
@@ -68,11 +74,14 @@ struct PreviewableSourceMap {
   /// The directive sets the line of what follows it and the compiler counts up from there, so a diagnostic raised
   /// deeper in the generated declaration is reported a few lines below the annotation, past the end of the file
   /// for a short one. The file and the message stay correct, which is what makes the error actionable.
-  private func attributed(_ source: String, to location: String) -> String {
-        """
-        \(location)
-        \(source)
-        #sourceLocation()
-        """
+  private func attributed(
+    _ source: String,
+    to location: String
+  ) -> String {
+    """
+    \(location)
+    \(source)
+    #sourceLocation()
+    """
   }
 }

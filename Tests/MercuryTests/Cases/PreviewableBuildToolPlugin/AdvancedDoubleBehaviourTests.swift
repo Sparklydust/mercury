@@ -14,66 +14,74 @@ struct AdvancedDoubleBehaviourTests {
     double.loadIdIntStub = "number"
     double.loadIdStringStub = "text"
     double.loadNameStringStub = "name"
+    let expected = ["number", "text", "name"]
 
     let result = [double.load(id: 1), double.load(id: "1"), double.load(name: "1")]
 
-    #expect(result == ["number", "text", "name"], "Each overload must return its own configured response.")
+    #expect(result == expected, "Each overload must return its own configured response.")
   }
 
   @Test
   func overloads_signaturesDiffer_recordingsIdentifyEachSignature() {
     let double = OverloadedServiceDouble()
+    let expected = 2
 
     _ = double.load(id: 1)
     _ = double.load(id: "1")
     let result = Set(double.calledMethods).count
 
-    #expect(result == 2, "Overloads with identical labels must have distinct recording identities.")
+    #expect(result == expected, "Overloads with identical labels must have distinct recording identities.")
   }
 
   @Test
   func associatedType_responseIsConfigured_originalMethodsReturnValues() {
     sut.valueStub = "first"
     sut.valueForIntStub = "second"
+    let expected = ["first", "second"]
 
     let result = [sut.value(), sut.value(for: 1)]
 
-    #expect(result == ["first", "second"], "Associated responses must preserve the concrete specialization.")
+    #expect(result == expected, "Associated responses must preserve the concrete specialization.")
   }
 
   @Test
   func associatedType_optionalDefault_isNil() {
+    let expected: String? = nil
+
     let result = sut.current
 
-    #expect(result == nil, "An associated optional must retain its valid nil default.")
+    #expect(result == expected, "An associated optional must retain its valid nil default.")
   }
 
   @Test
   func associatedType_concreteBinding_usesConcreteDefault() {
     let double = ConcreteStoreDouble()
+    let expected = ""
 
     let result = double.value()
 
-    #expect(result == "", "A concrete same-type binding must use the existing scalar default.")
+    #expect(result == expected, "A concrete same-type binding must use the existing scalar default.")
   }
 
   @Test
   func associatedTypes_transitiveConcreteBindings_resolveWithoutGenericParameters() {
     let double = ConcreteChainDouble()
+    let expected = ""
 
     let result = double.value()
 
-    #expect(result == "", "Transitive equalities must resolve every associated name to the concrete type.")
+    #expect(result == expected, "Transitive equalities must resolve every associated name to the concrete type.")
   }
 
   @Test
   func associatedType_optionalSpecialization_acceptsExplicitNil() {
     let double = AssociatedStoreDouble<String?>()
     double.valueStub = nil
+    let expected: String? = nil
 
     let result = double.value()
 
-    #expect(result == nil, "An explicitly configured nil must differ from an unconfigured associated response.")
+    #expect(result == expected, "An explicitly configured nil must differ from an unconfigured associated response.")
   }
 
   @Test
@@ -99,20 +107,22 @@ struct AdvancedDoubleBehaviourTests {
   @Test
   func subscript_indicesDiffer_returnsConstantResponse() {
     sut.subscriptStub = "configured"
+    let expected = ["configured", "configured"]
 
     let result = [sut[1], sut[2]]
 
-    #expect(result == ["configured", "configured"], "V1 subscripts use a constant response for every index.")
+    #expect(result == expected, "V1 subscripts use a constant response for every index.")
   }
 
   @Test
   func subscript_valueIsAssigned_preservesConfiguredResponse() {
     sut.subscriptStub = "configured"
+    let expected = "configured"
 
     sut[1] = "written"
     let result = sut[1]
 
-    #expect(result == "configured", "A subscript write must not replace its configured getter response.")
+    #expect(result == expected, "A subscript write must not replace its configured getter response.")
   }
 
   @Test
@@ -129,30 +139,33 @@ struct AdvancedDoubleBehaviourTests {
   func subscript_indexIsNotHashable_remainsSupported() {
     let double = IndexedServiceDouble()
     double.subscriptNonHashableIndexStub = "ready"
+    let expected = "ready"
 
     let result = double[NonHashableIndex(value: 1)]
 
-    #expect(result == "ready", "Subscript generation must not require Hashable indices.")
+    #expect(result == expected, "Subscript generation must not require Hashable indices.")
   }
 
   @Test
   func subscript_getterIsAsync_preservesItsEffects() async throws {
     let double = AsyncIndexedServiceDouble()
     double.subscriptStub = "ready"
+    let expected = "ready"
 
     let result = try await double[1]
 
-    #expect(result == "ready", "An asynchronous throwing getter must preserve its configured response.")
+    #expect(result == expected, "An asynchronous throwing getter must preserve its configured response.")
   }
 
   @Test
   func subscript_getterIsGeneric_usesConcreteResponse() {
     let double = GenericIndexedServiceDouble()
     double.subscriptStub.set("ready", for: String.self)
+    let expected = "ready"
 
     let result = double[String.self]
 
-    #expect(result == "ready", "Generic subscripts must retrieve the configured concrete response.")
+    #expect(result == expected, "Generic subscripts must retrieve the configured concrete response.")
   }
 
   @Test
@@ -176,6 +189,8 @@ struct AdvancedDoubleBehaviourTests {
 
   @Test
   func staticScope_childrenShareState_recordsEveryInvocation() async throws {
+    let expected = 300
+
     let result = try await AssociatedStoreDouble<String>.withStaticStubs {
       AssociatedStoreDouble<String>.fetchIntStub = "ready"
       try await withThrowingTaskGroup(of: Void.self) { group in
@@ -187,23 +202,27 @@ struct AdvancedDoubleBehaviourTests {
       return AssociatedStoreDouble<String>.calledMethods.count
     }
 
-    #expect(result == 300, "Inherited task-local bindings must share synchronized reference-backed recordings.")
+    #expect(result == expected, "Inherited task-local bindings must share synchronized reference-backed recordings.")
   }
 
   @Test
   func staticScope_configurationIsConcurrent_retainsCompleteAssignments() async {
+    let expected = 0..<100
+
     let result = await AssociatedStoreDouble<String>.withStaticStubs {
       await withTaskGroup(of: Void.self) { group in
-        for index in 0..<100 { group.addTask { AssociatedStoreDouble<String>.revision = index } }
+        for index in expected { group.addTask { AssociatedStoreDouble<String>.revision = index } }
       }
       return AssociatedStoreDouble<String>.revision
     }
 
-    #expect((0..<100).contains(result), "Concurrent assignments must be memory-safe without promising writer order.")
+    #expect(expected.contains(result), "Concurrent assignments must be memory-safe without promising writer order.")
   }
 
   @Test
   func staticErrors_callsAreSequential_consumesQueueBeforePersistentError() async {
+    let expected: [ScopedFailure] = [.numbered(1), .numbered(2), .numbered(3)]
+
     let result = await AssociatedStoreDouble<String>.withStaticStubs {
       AssociatedStoreDouble<String>.fetchIntErrorsStub = [ScopedFailure.numbered(1), ScopedFailure.numbered(2)]
       AssociatedStoreDouble<String>.fetchIntErrorStub = ScopedFailure.numbered(3)
@@ -217,11 +236,15 @@ struct AdvancedDoubleBehaviourTests {
     }
 
     #expect(
-      result == [.numbered(1), .numbered(2), .numbered(3)], "Sequential calls must consume errors in FIFO order.")
+      result == expected,
+      "Sequential calls must consume errors in FIFO order."
+    )
   }
 
   @Test
   func staticErrors_childrenAppendConcurrently_preservesEveryEntry() async {
+    let expected = 300
+
     let result = await AssociatedStoreDouble<String>.withStaticStubs {
       await withTaskGroup(of: Void.self) { group in
         for index in 0..<300 {
@@ -231,11 +254,13 @@ struct AdvancedDoubleBehaviourTests {
       return AssociatedStoreDouble<String>.fetchIntErrorsStub.count
     }
 
-    #expect(result == 300, "Concurrent queue mutations through static proxies must preserve every append.")
+    #expect(result == expected, "Concurrent queue mutations through static proxies must preserve every append.")
   }
 
   @Test
   func staticErrors_callsAreConcurrent_consumesEveryEntryExactlyOnce() async {
+    let expected = Set(0..<300)
+
     let result = await AssociatedStoreDouble<String>.withStaticStubs {
       AssociatedStoreDouble<String>.fetchIntErrorsStub = (0..<300).map(ScopedFailure.numbered)
       return await withTaskGroup(of: Int.self, returning: Set<Int>.self) { group in
@@ -253,11 +278,13 @@ struct AdvancedDoubleBehaviourTests {
       }
     }
 
-    #expect(result == Set(0..<300), "Concurrent callers must consume each queued entry once, regardless of scheduling.")
+    #expect(result == expected, "Concurrent callers must consume each queued entry once, regardless of scheduling.")
   }
 
   @Test
   func staticScope_nestedScopeIsCancelled_restoresOuterState() async {
+    let expected = 42
+
     let result = await Task {
       await AssociatedStoreDouble<String>.withStaticStubs {
         AssociatedStoreDouble<String>.revision = 42
@@ -273,11 +300,13 @@ struct AdvancedDoubleBehaviourTests {
       }
     }.value
 
-    #expect(result == 42, "Cancellation must restore the enclosing task-local binding.")
+    #expect(result == expected, "Cancellation must restore the enclosing task-local binding.")
   }
 
   @Test
   func staticScope_nestedScopeThrows_restoresOuterState() {
+    let expected = 42
+
     let result = AssociatedStoreDouble<String>.withStaticStubs {
       AssociatedStoreDouble<String>.revision = 42
       do {
@@ -289,11 +318,13 @@ struct AdvancedDoubleBehaviourTests {
       return AssociatedStoreDouble<String>.revision
     }
 
-    #expect(result == 42, "A throwing nested scope must restore the outer binding.")
+    #expect(result == expected, "A throwing nested scope must restore the outer binding.")
   }
 
   @Test
   func staticScope_specializationsDiffer_keepIndependentBindings() {
+    let expected = 42
+
     let result = AssociatedStoreDouble<String>.withStaticStubs {
       AssociatedStoreDouble<String>.revision = 42
       return AssociatedStoreDouble<Int>.withStaticStubs {
@@ -302,30 +333,32 @@ struct AdvancedDoubleBehaviourTests {
       }
     }
 
-    #expect(result == 42, "Static scopes must be keyed by the concrete generic specialization.")
+    #expect(result == expected, "Static scopes must be keyed by the concrete generic specialization.")
   }
 
   @Test
   func staticSubscript_valueIsAssigned_preservesGetterResponse() {
+    let expected = "ready"
+
     let result = AssociatedStoreDouble<String>.withStaticStubs {
       AssociatedStoreDouble<String>.subscriptStub = "ready"
       AssociatedStoreDouble<String>[1] = "write"
       return AssociatedStoreDouble<String>[2]
     }
 
-    #expect(result == "ready", "Static subscript setters must record writes without changing configured responses.")
+    #expect(result == expected, "Static subscript setters must record writes without changing configured responses.")
   }
 
   @Test
   @MainActor
   func staticScope_actorRequirement_retainsActorIsolatedArguments() {
-    let payload = ScopedPayload()
+    let expected = ScopedPayload()
 
     let result = ActorStaticServiceDouble.withStaticStubs {
-      _ = ActorStaticServiceDouble.store(payload)
+      _ = ActorStaticServiceDouble.store(expected)
       return ActorStaticServiceDouble.passedParameters["store(_:)"]?.first?.first as? ScopedPayload
     }
 
-    #expect(result === payload, "Actor-isolated static recordings must retain their original payload.")
+    #expect(result === expected, "Actor-isolated static recordings must retain their original payload.")
   }
 }

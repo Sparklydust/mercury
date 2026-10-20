@@ -29,15 +29,18 @@ enum PreviewableAnnotationValidator {
   }
 
   /// Rejects an annotation the generator cannot emit a peer for, whatever the macro asks for.
-  private static func validatePositions(in index: ModuleIndex, sourceMap: PreviewableSourceMap) throws {
+  private static func validatePositions(
+    in index: ModuleIndex,
+    sourceMap: PreviewableSourceMap
+  ) throws {
     for annotation in index.annotations {
       guard case .unsupported(let reason) = annotation.position else { continue }
       throw sourceMap.diagnostic(
-                """
-                @\(annotation.annotation.rawValue) cannot generate for '\(annotation.name)' declared \
-                \(reason) — move the declaration to file scope or nest it directly in a type
-                """,
-                for: annotation
+        """
+        @\(annotation.annotation.rawValue) cannot generate for '\(annotation.name)' declared \
+        \(reason) — move the declaration to file scope or nest it directly in a type
+        """,
+        for: annotation
       )
     }
   }

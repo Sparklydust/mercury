@@ -26,7 +26,7 @@ struct PreviewableFakeGeneratorTests {
   @Test(arguments: [
     ") -> Model {\n    .init(",
     "convenience init(\n    value: String",
-    ") -> ReferenceModel {\n    .init(",
+    ") -> ReferenceModel {\n    .init("
   ])
   func generator_fakeIsAnnotated_expectedFactoryMemberIsGenerated(
     _ expected: String
@@ -43,7 +43,7 @@ struct PreviewableFakeGeneratorTests {
     ("extension Model", true),
     ("value: String = { () -> String in preconditionFailure(", true),
     ("preconditionFailure(\"Model.fake(...) is unavailable", true),
-    (".init(", false),
+    (".init(", false)
   ])
   func generator_fakeIsBuiltOutsideDebug_factoryContainsOnlyUnavailableConstruction(
     _ fragment: String,
@@ -80,18 +80,19 @@ struct PreviewableFakeGeneratorTests {
       }
       """
     ]
+    let expected = "storageKey"
 
     let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
-      !result.contains("storageKey"),
+      !result.contains(expected),
       "A private property must never appear in the generated fake factory."
     )
   }
 
   @Test(arguments: [
     ("open ", false),
-    ("public static func fake(", true),
+    ("public static func fake(", true)
   ])
   func generator_typeIsOpen_generatedMembersUseSupportedAccess(_ fragment: String, _ expected: Bool) throws {
     let source = """
@@ -123,7 +124,8 @@ struct PreviewableFakeGeneratorTests {
 
         @PreviewableFake
         public struct Wrapper { let helper: Helper }
-        """)
+        """
+    )
 
     #expect(
       result == expected,
@@ -142,18 +144,19 @@ struct PreviewableFakeGeneratorTests {
       public struct Wrapper { public let helper: Helper }
       """
     ]
+    let expected = "public static func fake(\n    helper: Helper = Helper.fake()"
 
     let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
-      result.contains("public static func fake(\n    helper: Helper = Helper.fake()"),
+      result.contains(expected),
       "Matching visibility must stay allowed, or the check would forbid the normal case."
     )
   }
 
   @Test(arguments: [
     "onDone: @escaping () -> Void",
-    "convenience init(\n    onDone: @escaping () -> Void",
+    "convenience init(\n    onDone: @escaping () -> Void"
   ])
   func generator_propertyIsAClosure_factoryParameterEscapes(_ expected: String) throws {
     let sources = [
@@ -186,11 +189,12 @@ struct PreviewableFakeGeneratorTests {
       }
       """
     ]
+    let expected = "@escaping"
 
     let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
-      !result.contains("@escaping"),
+      !result.contains(expected),
       "`@escaping` applies to function types only, so an optional closure must be left bare."
     )
   }
@@ -207,7 +211,7 @@ struct PreviewableFakeGeneratorTests {
 
   @Test(arguments: [
     "private var cache = 0",
-    "private let cache: Int",
+    "private let cache: Int"
   ])
   func generator_customInitializerHandlesHiddenProperty_factoryIsGenerated(_ hidden: String) throws {
     let source = """
@@ -228,7 +232,7 @@ struct PreviewableFakeGeneratorTests {
   @Test(arguments: [
     "Swift.Int",
     "Count",
-    "Scope.Count",
+    "Scope.Count"
   ])
   func generator_initializerUsesEquivalentType_factoryIsGenerated(_ parameterType: String) throws {
     let source = """
@@ -279,7 +283,8 @@ struct PreviewableFakeGeneratorTests {
 
     let generated = try PreviewableSourceGenerator.generate(from: [source])
     let result = generated.components(separatedBy: "\n").first { $0.contains("static func fake(") }?.trimmingCharacters(
-      in: .whitespaces)
+      in: .whitespaces
+    )
 
     #expect(result == expected, "Factory access must not exceed the enclosing type's visibility.")
   }

@@ -56,7 +56,7 @@ struct DefaultValueResolverTests {
     "delegateStub: any OtherProtocol = OtherDouble()",
     "outcomeStub: Result<Int, any Error> = .success(.zero)",
     "ownerStub: User = User.fake()",
-    "payloadStub: Data = Data()",
+    "payloadStub: Data = Data()"
   ])
   func resolver_requirementTypeIsComposite_defaultIsConstructible(_ expected: String) throws {
     let result = try PreviewableSourceGenerator.generate(from: [compositionSource])
@@ -97,7 +97,7 @@ struct DefaultValueResolverTests {
     "secondID: UUID = UUID(uuidString: \"00000000-0000-0000-0000-000000000002\")!",
     "firstDate: Date = Date(timeIntervalSince1970: 1704067200)",
     "secondDate: Date = Date(timeIntervalSince1970: 1704153600)",
-    "Generated `Date` values begin at `2024-01-01T00:00:00Z`",
+    "Generated `Date` values begin at `2024-01-01T00:00:00Z`"
   ])
   func resolver_fakeHasScalarFields_defaultsFollowAllocationOrder(_ expected: String) throws {
     let result = try PreviewableSourceGenerator.generate(from: [fakeDefaultsSource])
@@ -108,7 +108,6 @@ struct DefaultValueResolverTests {
   @Test
   func resolver_fakeHasTwoStrings_defaultsAreDistinct() throws {
     let expected = 2
-
     let generated = try PreviewableSourceGenerator.generate(from: [fakeDefaultsSource])
     let result = Set(generatedStringDefaults(in: generated)).count
 
@@ -118,7 +117,6 @@ struct DefaultValueResolverTests {
   @Test
   func resolver_fakeHasTwoStrings_wordCountsFollowAllocationOrder() throws {
     let expected = [2, 3]
-
     let generated = try PreviewableSourceGenerator.generate(from: [fakeDefaultsSource])
     let result = generatedStringDefaults(in: generated).map { $0.split(separator: " ").count }
 
@@ -127,9 +125,11 @@ struct DefaultValueResolverTests {
 
   @Test
   func resolver_fakeHasStrings_obsoletePlaceholderIsAbsent() throws {
+    let expected = "LoremIpsum"
+
     let result = try PreviewableSourceGenerator.generate(from: [fakeDefaultsSource])
 
-    #expect(!result.contains("LoremIpsum"), "String defaults must not use the obsolete placeholder.")
+    #expect(!result.contains(expected), "String defaults must not use the obsolete placeholder.")
   }
 
   @Test(arguments: [
@@ -171,7 +171,7 @@ struct DefaultValueResolverTests {
       struct Holder { let box: Box<Int> }
       """,
       "cannot synthesise a default for generic parameter 'Item'"
-    ),
+    )
   ])
   func resolver_typeCannotBeDefaulted_diagnosticNamesTheFix(
     _ source: String,
@@ -203,7 +203,7 @@ struct DefaultValueResolverTests {
       struct Session { var mode: Outer.Mode }
       """,
       "mode: Outer.Mode = Outer.Mode.automatic"
-    ),
+    )
   ])
   func resolver_requirementIsEnumeration_defaultNamesACaseInScope(
     _ source: String,
@@ -215,5 +215,68 @@ struct DefaultValueResolverTests {
       result.contains(expected),
       "The default must name a parameterless case through its enclosing types, got `\(result)`."
     )
+  }
+
+  @Test(arguments: [
+    ("typealias Count = Int", "Count", "1"),
+    ("typealias Count = Int\ntypealias Total = Count", "Total", "1"),
+    ("enum Domain { typealias Count = Int }", "Domain.Count", "1"),
+    ("typealias Values = [Int]", "Values", "[]"),
+    ("typealias Value = Int?", "Value", ".none")
+  ])
+  func resolver_fakeFieldUsesAlias_defaultMatchesUnderlyingType(
+    _ declaration: String,
+    _ type: String,
+    _ value: String
+  ) throws {
+    let source = declaration + "\n@PreviewableFake struct Model { let value: \(type) }"
+    let expected = "value: \(type) = \(value)"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "Aliases must preserve their factory parameter type.")
+  }
+
+  @Test
+  func resolver_aliasIsShadowed_defaultUsesDeclarationScope() throws {
+    let source = """
+      typealias Value = String
+      enum Domain {
+        typealias Value = Int
+        typealias Count = Value
+        @PreviewableFake struct Model {
+          typealias Value = Bool
+          let count: Count
+        }
+      }
+      """
+    let expected = "count: Domain.Count = 1"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "Alias targets must resolve in the alias's declaration scope.")
+  }
+
+  @Test
+  func resolver_fakeFieldUsesClosureAlias_parameterEscapes() throws {
+    let source = "typealias Action = () -> Int\n@PreviewableFake struct Model { let action: Action }"
+    let expected = "action: @escaping Action = { 1 }"
+
+    let result = try PreviewableSourceGenerator.generate(from: [source])
+
+    #expect(result.contains(expected), "An aliased closure must be storable by the factory.")
+  }
+
+  @Test(arguments: [
+    ("typealias A = B\ntypealias B = A\n@PreviewableFake struct Model { let value: A }", "cyclic type alias"),
+    (
+      "typealias Next = Model\n@PreviewableFake final class Model { var next: Next; init() { fatalError() } }",
+      "recursive default construction"
+    )
+  ])
+  func resolver_aliasFormsCycle_diagnosticExplainsFailure(_ source: String, _ expected: String) {
+    let result = generatorDiagnosticMessage(for: source)
+
+    #expect(result?.contains(expected) == true, "Alias expansion must reject cyclic construction.")
   }
 }

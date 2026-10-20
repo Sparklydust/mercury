@@ -25,7 +25,6 @@ struct PreviewableFakeMacro: PeerMacro {
     in context: some MacroExpansionContext
   ) throws -> [DeclSyntax] {
     try validate(declaration, declaresParameters: declaresParameters(in: node))
-
     _ = context
     return []
   }
@@ -41,7 +40,10 @@ private extension PreviewableFakeMacro {
     }
   }
 
-  static func validate(_ declaration: some DeclSyntaxProtocol, declaresParameters: Bool) throws {
+  static func validate(
+    _ declaration: some DeclSyntaxProtocol,
+    declaresParameters: Bool
+  ) throws {
     if let extensionDeclaration = declaration.as(ExtensionDeclSyntax.self) {
       try validate(extensionDeclaration, declaresParameters: declaresParameters)
     } else if declaration.is(StructDeclSyntax.self) || declaration.is(ClassDeclSyntax.self) {

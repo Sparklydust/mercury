@@ -14,27 +14,34 @@ struct PreviewableAccessorDiagnosticsTests {
     "private let serviceDouble = 1",
     "func serviceDouble() -> Int { 1 }",
     "struct serviceDouble {}",
-    "@PreviewableDouble protocol service {}",
+    "@PreviewableDouble protocol service {}"
   ])
   func generator_accessorNameAlreadyExists_diagnosticNamesConflict(_ declaration: String) {
     let source = declaration + "\n@PreviewableDouble protocol Service {}"
 
     let result = generatorDiagnosticMessage(for: source)
 
-    #expect(result?.contains("generated name 'serviceDouble' conflicts") == true, "Conflicts must fail during generation.")
+    #expect(
+      result?.contains("generated name 'serviceDouble' conflicts") == true,
+      "Conflicts must fail during generation."
+    )
   }
 
   @Test(arguments: [
     "struct Scope { let serviceDouble = 1 }",
     "func configure() { let serviceDouble = 1 }",
-    "func serviceDouble(_ value: Int) -> Int { value }",
+    "func serviceDouble(_ value: Int) -> Int { value }"
   ])
   func generator_nameCanCoexistWithAccessor_generationSucceeds(_ declaration: String) throws {
     let source = declaration + "\n@PreviewableDouble protocol Service {}"
+    let expected = "var serviceDouble: ServiceDouble"
 
     let result = try PreviewableSourceGenerator.generate(from: [source])
 
-    #expect(result.contains("var serviceDouble: ServiceDouble"), "Local names and callable overloads must remain valid.")
+    #expect(
+      result.contains(expected),
+      "Local names and callable overloads must remain valid."
+    )
   }
 
   @Test
@@ -43,9 +50,10 @@ struct PreviewableAccessorDiagnosticsTests {
       let serviceDouble = 1
       @PreviewableDouble protocol Service { associatedtype Value; func load() -> Value }
       """
+    let expected = "var serviceDouble:"
 
     let result = try PreviewableSourceGenerator.generate(from: [source])
 
-    #expect(!result.contains("var serviceDouble:"), "Generic doubles must not reserve an accessor they do not emit.")
+    #expect(!result.contains(expected), "Generic doubles must not reserve an accessor they do not emit.")
   }
 }

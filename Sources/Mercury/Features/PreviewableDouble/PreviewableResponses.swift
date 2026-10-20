@@ -20,8 +20,11 @@ public final class PreviewableResponses: @unchecked Sendable {
   /// - Parameters:
   ///   - value: The response, including an explicitly typed optional `nil`.
   ///   - type: The return type requested by the generic method.
-  public func set<Value: Sendable>(_ value: Value, for type: Value.Type) {
-    lock.withLock { values[ObjectIdentifier(type)] = Response(value: value) }
+  public func set<Value: Sendable>(
+    _ value: Value,
+    for type: Value.Type
+  ) {
+    lock.withLock { values[ObjectIdentifier(type)] = PreviewableResponse(value: value) }
   }
 
   /// Removes the response for a concrete type.
@@ -35,18 +38,14 @@ public final class PreviewableResponses: @unchecked Sendable {
   ///   - type: The concrete return type.
   ///   - method: The generated method name included in a failure diagnostic.
   @_spi(Generated)
-  public func require<Value: Sendable>(_ type: Value.Type, method: String) -> Value {
-    let response = lock.withLock { values[ObjectIdentifier(type)] as? Response<Value> }
+  public func require<Value: Sendable>(
+    _ type: Value.Type,
+    method: String
+  ) -> Value {
+    let response = lock.withLock { values[ObjectIdentifier(type)] as? PreviewableResponse<Value> }
     guard let response else {
       preconditionFailure("Missing Previewable response for \(method) returning \(String(reflecting: type))")
     }
     return response.value
-  }
-}
-
-private extension PreviewableResponses {
-
-  struct Response<Value: Sendable>: Sendable {
-    let value: Value
   }
 }

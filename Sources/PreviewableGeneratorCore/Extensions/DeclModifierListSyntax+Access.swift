@@ -12,9 +12,10 @@ extension DeclModifierListSyntax {
   /// generated here.
   var accessPrefix: String {
     let accessLevels = ["open", "public", "package"]
-    guard let modifier = first(where: { accessLevels.contains($0.name.text) }) else {
-      return String()
-    }
+
+    guard let modifier = first(where: { accessLevels.contains($0.name.text) })
+    else { return String() }
+
     return modifier.name.text == "open" ? "public " : "\(modifier.name.text) "
   }
 

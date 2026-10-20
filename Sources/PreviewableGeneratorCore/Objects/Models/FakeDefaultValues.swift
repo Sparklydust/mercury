@@ -18,24 +18,28 @@ struct FakeDefaultValues {
     let count = 2 + stringCount % 3
     var remainder = stringCount / 3
     var phrase: [String] = []
+
     for position in 0..<count {
       phrase.append(Self.words[(remainder % Self.words.count + position) % Self.words.count])
       remainder /= Self.words.count
     }
-    if remainder > 0 { phrase.append(String(remainder)) }
+    if remainder > 0 {
+      phrase.append(String(remainder))
+    }
     stringCount += 1
     return String(reflecting: phrase.joined(separator: " "))
   }
 
   private static let words = [
     "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit",
-    "sed", "do", "eiusmod", "tempor", "incididunt", "ut", "labore", "dolore",
+    "sed", "do", "eiusmod", "tempor", "incididunt", "ut", "labore", "dolore"
   ]
 
   /// Returns a positive numeric literal, cycling within the supported bound for its type.
   /// - Parameter type: The numeric type's unqualified name.
   mutating func number(for type: String) -> String {
     let limit: Int
+
     switch type {
     case "Int8": limit = 127
     case "UInt8": limit = 255

@@ -49,7 +49,7 @@ struct PreviewableFakeDiagnosticsTests {
       struct Model { let value: String; init(from other: Model) { self = other } }
       """,
       "declaring an initializer suppresses the memberwise one"
-    ),
+    )
   ])
   func generator_declarationIsUnsupported_diagnosticNamesTheFix(
     _ source: String,
@@ -77,7 +77,9 @@ struct PreviewableFakeDiagnosticsTests {
     let result = generatorDiagnosticMessage(for: source)
 
     #expect(
-      result?.contains(expected) == true, "Initializer-specific actor isolation must produce a source diagnostic.")
+      result?.contains(expected) == true,
+      "Initializer-specific actor isolation must produce a source diagnostic."
+    )
   }
 
   @Test(arguments: ["init(token: Int) {}", "init() throws {}"])
@@ -90,7 +92,10 @@ struct PreviewableFakeDiagnosticsTests {
 
     let result = generatorDiagnosticMessage(for: source)
 
-    #expect(result?.contains(expected) == true, "Inherited initialization must not be assumed to be nonthrowing init().")
+    #expect(
+      result?.contains(expected) == true,
+      "Inherited initialization must not be assumed to be nonthrowing init()."
+    )
   }
 
   @Test(arguments: ["String", "Wrong", "Swift.Int"])
@@ -109,7 +114,9 @@ struct PreviewableFakeDiagnosticsTests {
     let result = generatorDiagnosticMessage(for: source)
 
     #expect(
-      result?.contains(expected) == true, "Initializer matching must preserve local types that shadow Swift names.")
+      result?.contains(expected) == true,
+      "Initializer matching must preserve local types that shadow Swift names."
+    )
   }
 
   @Test(arguments: ["Namespace.Helper", "[Namespace.Helper]", "(Namespace.Helper, Int)"])
@@ -127,6 +134,8 @@ struct PreviewableFakeDiagnosticsTests {
     let result = generatorDiagnosticMessage(for: source)
 
     #expect(
-      result?.contains(expected) == true, "Access validation must inspect qualified types inside composite types.")
+      result?.contains(expected) == true,
+      "Access validation must inspect qualified types inside composite types."
+    )
   }
 }

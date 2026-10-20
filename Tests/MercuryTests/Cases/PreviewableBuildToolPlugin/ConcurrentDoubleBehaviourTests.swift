@@ -27,8 +27,8 @@ struct ConcurrentDoubleBehaviourTests {
 
   @Test
   func double_errorsAreQueued_concurrentCallsConsumeEachErrorOnce() async {
+    sut.loadErrorsStub = Array(repeating: ConstructionError.invalid, count: 100)
     let expected = 100
-    sut.loadErrorsStub = Array(repeating: ConstructionError.invalid, count: expected)
 
     let result = await withTaskGroup(of: Int.self) { group in
       for key in 0..<200 {
@@ -72,9 +72,9 @@ struct ConcurrentDoubleBehaviourTests {
 
   @Test
   func genericMethod_responsesHaveDifferentTypes_eachTypeKeepsItsResponse() async throws {
+    sut.makeStub.set("value", for: String.self)
+    sut.makeStub.set(42, for: Int.self)
     let expected = ("value", 42)
-    sut.makeStub.set(expected.0, for: String.self)
-    sut.makeStub.set(expected.1, for: Int.self)
 
     let result = (try await sut.make(String.self), try await sut.make(Int.self))
 
@@ -84,18 +84,19 @@ struct ConcurrentDoubleBehaviourTests {
   @Test
   func genericMethod_optionalNilIsConfigured_nilIsReturned() async throws {
     sut.makeStub.set(nil, for: String?.self)
+    let expected: String? = nil
 
     let result = try await sut.make(String?.self)
 
-    #expect(result == nil, "An explicitly configured optional nil must be returned.")
+    #expect(result == expected, "An explicitly configured optional nil must be returned.")
   }
 
   @Test
   func genericMethod_responseIsRemovedAndReconfigured_newResponseIsReturned() async throws {
-    let expected = 2
     sut.makeStub.set(1, for: Int.self)
     sut.makeStub.remove(for: Int.self)
-    sut.makeStub.set(expected, for: Int.self)
+    sut.makeStub.set(2, for: Int.self)
+    let expected = 2
 
     let result = try await sut.make(Int.self)
 

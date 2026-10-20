@@ -5,16 +5,14 @@
 import Foundation
 import PreviewableGeneratorCore
 
-// The file holding an executable target's top-level code must be named `main.swift`, so this file carries the
-// invocation and nothing else.
-
-// Source diagnostics retain their file location; invocation and I/O failures use an unlocated error message.
+// Source diagnostics retain their file location; invocation and I/O failures use an unallocated error message.
+// - Info: holding an executable target's top-level code, carrying its invocation and nothing else.
 do {
-    try PreviewableGenerator.run()
+  try PreviewableGenerator.run()
 } catch let diagnostic as PreviewableDiagnostic {
-    FileHandle.standardError.write(Data("\(diagnostic)\n".utf8))
-    exit(1)
+  FileHandle.standardError.write(Data("\(diagnostic)\n".utf8))
+  exit(1)
 } catch {
-    FileHandle.standardError.write(Data("error: \(error)\n".utf8))
-    exit(1)
+  FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+  exit(1)
 }

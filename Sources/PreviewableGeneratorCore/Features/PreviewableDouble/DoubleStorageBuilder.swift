@@ -81,10 +81,11 @@ enum DoubleStorageBuilder {
       guard case .attribute(let attribute) = element else { return nil }
       let name = attribute.attributeName.trimmedDescription
       let resolved = index.resolve(name, scope: scope) ?? name
-      guard
-        ["MainActor", "Swift.MainActor", "_Concurrency.MainActor"].contains(name)
-          || index.globalActors.contains(resolved)
+
+      guard ["MainActor", "Swift.MainActor", "_Concurrency.MainActor"].contains(name)
+            || index.globalActors.contains(resolved)
       else { return nil }
+
       return attribute.trimmedDescription + "\n"
     }.joined()
   }
@@ -101,15 +102,22 @@ enum DoubleStorageBuilder {
   ) -> Bool {
     let name = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
     let scope = name.split(separator: ".").map(String.init)
+
     guard !visited.contains(name) else { return false }
     if !isolationAttributes(in: declaration.attributes, index: index, scope: scope).isEmpty {
       return true
     }
+
     return (declaration.inheritanceClause?.inheritedTypes ?? []).contains {
       guard let resolved = index.resolve($0.type.trimmedDescription, scope: scope),
-        let base = index.protocols[resolved]
+            let base = index.protocols[resolved]
       else { return false }
-      return isIsolated(base, index: index, visited: visited.union([name]))
+
+      return isIsolated(
+        base,
+        index: index,
+        visited: visited.union([name])
+      )
     }
   }
 }

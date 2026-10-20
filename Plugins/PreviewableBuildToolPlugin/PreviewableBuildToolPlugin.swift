@@ -18,7 +18,9 @@ struct PreviewableBuildToolPlugin: BuildToolPlugin {
     context: PluginContext,
     target: Target
   ) throws -> [Command] {
+
     guard let target = target as? SourceModuleTarget else { return [] }
+
     return try commands(
       tool: context.tool(named: "PreviewableGenerator").url,
       sourceFiles: target.sourceFiles(withSuffix: "swift").map(\.url),
@@ -41,7 +43,11 @@ struct PreviewableBuildToolPlugin: BuildToolPlugin {
     let sources = sourceFiles.sorted { $0.path < $1.path }
     let inputList = workDirectory.appending(path: "PreviewableSources.json")
     let data = try JSONEncoder().encode(sources.map(\.path))
-    if (try? Data(contentsOf: inputList)) != data { try data.write(to: inputList, options: .atomic) }
+
+    if (try? Data(contentsOf: inputList)) != data {
+      try data.write(to: inputList, options: .atomic)
+    }
+
     return [
       .buildCommand(
         displayName: "Generate Debug previewables",

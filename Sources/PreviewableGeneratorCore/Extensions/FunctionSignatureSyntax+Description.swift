@@ -13,7 +13,9 @@ extension FunctionSignatureSyntax {
       parameter.trailingComma = .none
       return parameter.trimmedDescription
     }
+
     let printedParameters: String
+
     if parameters.isEmpty {
       printedParameters = "()"
     } else if parameters.count == 1 {
@@ -24,6 +26,7 @@ extension FunctionSignatureSyntax {
 
     let printedEffects = effectSpecifiers.map { " \($0.trimmedDescription)" } ?? String()
     let printedReturnClause = returnClause.map { " \($0.trimmedDescription)" } ?? String()
+
     return printedParameters + printedEffects + printedReturnClause
   }
 }

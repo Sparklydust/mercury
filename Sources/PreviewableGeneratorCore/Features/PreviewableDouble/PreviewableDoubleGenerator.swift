@@ -11,8 +11,10 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
 
   static func conflict(in annotations: [AnnotatedDeclaration]) -> GenerationFailure? {
     var owners: [String: String] = [:]
+
     for annotation in annotations where annotation.annotation == .double {
       let doubleName = PreviewableDoubleNaming.doubleName(for: annotation.name)
+
       if let existing = owners[doubleName] {
         return GenerationFailure(
           annotation: annotation,
@@ -24,6 +26,7 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       }
       owners[doubleName] = annotation.name
     }
+
     return .none
   }
 
@@ -47,5 +50,4 @@ enum PreviewableDoubleGenerator: PreviewableFeatureProtocol {
       globalNames: generated.globalNames
     )
   }
-
 }

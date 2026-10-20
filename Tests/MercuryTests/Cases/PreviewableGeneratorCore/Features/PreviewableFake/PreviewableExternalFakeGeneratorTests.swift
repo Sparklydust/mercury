@@ -10,10 +10,11 @@ struct PreviewableExternalFakeGeneratorTests {
   @Test(arguments: ["repeat", "class", "default", "self"])
   func generator_externalParameterIsKeyword_argumentReferenceIsEscaped(_ name: String) throws {
     let source = "@PreviewableFake(parameters: [(\"\(name)\", Int.self)]) extension Model {}"
+    let expected = "`\(name)`: `\(name)`"
 
     let result = try PreviewableSourceGenerator.generate(from: [source])
 
-    #expect(result.contains("`\(name)`: `\(name)`"), "Keyword labels and references must remain valid Swift syntax.")
+    #expect(result.contains(expected), "Keyword labels and references must remain valid Swift syntax.")
   }
 
   private static let externalSource = """
@@ -30,7 +31,7 @@ struct PreviewableExternalFakeGeneratorTests {
     "expirationDate: Date = Date(timeIntervalSince1970: 1704067200)",
     ") -> AppCheckToken {",
     "token: token,",
-    "expirationDate: expirationDate",
+    "expirationDate: expirationDate"
   ])
   func generator_extensionDeclaresParameters_factoryMatchesTheDeclaredParameters(_ expected: String) throws {
     let result = try PreviewableSourceGenerator.generate(from: [Self.externalSource])
@@ -43,10 +44,12 @@ struct PreviewableExternalFakeGeneratorTests {
 
   @Test
   func generator_extensionDeclaresParameters_noConvenienceInitializerIsGenerated() throws {
+    let expected = "convenience init("
+
     let result = try PreviewableSourceGenerator.generate(from: [Self.externalSource])
 
     #expect(
-      !result.contains("convenience init("),
+      !result.contains(expected),
       "An initializer added from another module could not reach the extended type's stored properties."
     )
   }
@@ -63,11 +66,12 @@ struct PreviewableExternalFakeGeneratorTests {
       }
       """
     ]
+    let expected = "appCheck: AppCheckToken = AppCheckToken.fake()"
 
     let result = try PreviewableSourceGenerator.generate(from: sources)
 
     #expect(
-      result.contains("appCheck: AppCheckToken = AppCheckToken.fake()"),
+      result.contains(expected),
       "An annotated external type must be usable as a property type, exactly like an owned one."
     )
   }

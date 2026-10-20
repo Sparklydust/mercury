@@ -12,6 +12,7 @@ enum PreviewableFakeGenerator: PreviewableFeatureProtocol {
   static func conflict(in annotations: [AnnotatedDeclaration]) -> GenerationFailure? {
     // An owned type carries one annotation at most, but an extension can be annotated in any number of files.
     var fakedTypes: Set<String> = []
+
     for annotation in annotations where annotation.annotation == .fake {
       guard !fakedTypes.insert(annotation.qualifiedName).inserted else { continue }
       return GenerationFailure(

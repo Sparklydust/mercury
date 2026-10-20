@@ -36,11 +36,13 @@ let package = Package(
   ],
   targets: [
     // An executable target exposes the macro implementation as a product for packaging.
-    buildToolArtifacts ? .executableTarget(
+    buildToolArtifacts
+    ? .executableTarget(
       name: "PreviewableMacrosPlugin",
       dependencies: macroSourceDependencies,
       path: "Sources/PreviewableMacrosPlugin"
-    ) : .macro(
+    )
+    : .macro(
       name: "PreviewableMacrosPlugin",
       dependencies: buildGeneratorFromSource ? macroSourceDependencies : [],
       path: buildGeneratorFromSource ? "Sources/PreviewableMacrosPlugin" : "Sources/PreviewableMacrosLauncher"
@@ -78,15 +80,19 @@ let package = Package(
       ],
       plugins: ["PreviewableBuildToolPlugin"]
     )
-  ] + (buildGeneratorFromSource ? [] : [
-    .macro(
-      name: "PreviewableMacrosTestsSupport",
-      dependencies: macroSourceDependencies,
-      path: "Sources/PreviewableMacrosPlugin"
-    ),
-    .binaryTarget(
-      name: "PreviewableGeneratorBinary",
-      path: "Artifacts/PreviewableGenerator.artifactbundle"
-    )
-  ])
+  ] + (
+    buildGeneratorFromSource
+    ? []
+    : [
+      .macro(
+        name: "PreviewableMacrosTestsSupport",
+        dependencies: macroSourceDependencies,
+        path: "Sources/PreviewableMacrosPlugin"
+      ),
+      .binaryTarget(
+        name: "PreviewableGeneratorBinary",
+        path: "Artifacts/PreviewableGenerator.artifactbundle"
+      )
+    ]
+  )
 )

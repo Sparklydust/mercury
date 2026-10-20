@@ -28,6 +28,7 @@ final class DeclarationCollector: SyntaxVisitor {
     if let annotated = Self.annotation(in: node.attributes) {
       record(annotated, declaration: DeclSyntax(node), name: name, position: position, node: node)
     }
+
     return .visitChildren
   }
 
@@ -35,6 +36,7 @@ final class DeclarationCollector: SyntaxVisitor {
     recordGlobalName(node.name.text, at: node)
     let name = Self.qualifiedName(for: node.name.text, at: Self.lexicalPosition(of: node))
     index.typeAccess[name] = Self.effectiveAccess(of: node, modifiers: node.modifiers)
+
     if node.genericParameterClause == nil {
       index.typeAliases[name] = node.initializer.value
     }
@@ -44,14 +46,18 @@ final class DeclarationCollector: SyntaxVisitor {
   override func visit(_ node: VariableDeclSyntax) -> SyntaxVisitorContinueKind {
     for binding in node.bindings {
       for token in binding.pattern.tokens(viewMode: .sourceAccurate) {
-        if case .identifier(let name) = token.tokenKind { recordGlobalName(name, at: node) }
+        if case .identifier(let name) = token.tokenKind {
+          recordGlobalName(name, at: node)
+        }
       }
     }
     return .visitChildren
   }
 
   override func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {
-    if node.signature.parameterClause.parameters.isEmpty { recordGlobalName(node.name.text, at: node) }
+    if node.signature.parameterClause.parameters.isEmpty {
+      recordGlobalName(node.name.text, at: node)
+    }
     return .visitChildren
   }
 
@@ -59,7 +65,11 @@ final class DeclarationCollector: SyntaxVisitor {
     guard let annotated = Self.annotation(in: node.attributes) else { return .visitChildren }
     // The generator never sees the extended type, so its spelling in the extension is the only name there is.
     let name = node.extendedType.trimmedDescription
-    if annotated.annotation == .fake { index.fakeAnnotatedTypes.insert(name) }
+
+    if annotated.annotation == .fake {
+      index.fakeAnnotatedTypes.insert(name)
+    }
+
     record(
       annotated,
       declaration: DeclSyntax(node),
@@ -71,60 +81,21 @@ final class DeclarationCollector: SyntaxVisitor {
   }
 
   override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
-    visitNominal(
-      node: node,
-      name: node.name.text,
-      attributes: node.attributes,
-      modifiers: node.modifiers,
-      isGeneric: node.genericParameterClause != nil,
-      declaration: DeclSyntax(node)
-    )
-    return .visitChildren
+    collectNominal(node)
   }
 
   override func visit(_ node: ClassDeclSyntax) -> SyntaxVisitorContinueKind {
-    visitNominal(
-      node: node,
-      name: node.name.text,
-      attributes: node.attributes,
-      modifiers: node.modifiers,
-      isGeneric: node.genericParameterClause != nil,
-      declaration: DeclSyntax(node)
-    )
-    return .visitChildren
+    collectNominal(node)
   }
 
   override func visit(_ node: ActorDeclSyntax) -> SyntaxVisitorContinueKind {
-    visitNominal(
-      node: node,
-      name: node.name.text,
-      attributes: node.attributes,
-      modifiers: node.modifiers,
-      isGeneric: node.genericParameterClause != nil,
-      declaration: DeclSyntax(node)
-    )
-    return .visitChildren
+    collectNominal(node)
   }
 
   override func visit(_ node: EnumDeclSyntax) -> SyntaxVisitorContinueKind {
-    visitNominal(
-      node: node,
-      name: node.name.text,
-      attributes: node.attributes,
-      modifiers: node.modifiers,
-      isGeneric: node.genericParameterClause != nil,
-      declaration: DeclSyntax(node)
-    )
-    if let parameterlessCase = Self.firstParameterlessCase(in: node) {
-      let name = node.name.text
-      let position = Self.lexicalPosition(of: node)
-      // The generated file sits at module scope, so a nested enumeration must be named through its parents.
-      let qualifiedName = Self.qualifiedName(for: name, at: position)
-      for key in Self.keys(for: name, at: position) {
-        index.enumDefaults[key] = "\(qualifiedName).\(parameterlessCase)"
-      }
-    }
-    return .visitChildren
+    let result = collectNominal(node)
+    recordEnumDefault(node)
+    return result
   }
 }
 
@@ -134,15 +105,54 @@ private extension DeclarationCollector {
   /// - Parameters:
   ///   - name: The declared name, optionally escaped with backticks.
   ///   - node: The declaration whose enclosing scopes are inspected.
-  private func recordGlobalName(_ name: String, at node: some SyntaxProtocol) {
+  private func recordGlobalName(
+    _ name: String,
+    at node: some SyntaxProtocol
+  ) {
     var current = node.parent
+
     while let parent = current {
-      if parent.is(MemberBlockSyntax.self) || parent.is(CodeBlockSyntax.self) || parent.is(ClosureExprSyntax.self) {
+      if parent.is(MemberBlockSyntax.self)
+         || parent.is(CodeBlockSyntax.self)
+         || parent.is(ClosureExprSyntax.self) {
         return
       }
       current = parent.parent
     }
     index.globalNames.insert(name.replacingOccurrences(of: "`", with: ""))
+  }
+
+  private func recordEnumDefault(_ node: EnumDeclSyntax) {
+    guard let firstCase = Self.firstParameterlessCase(in: node) else { return }
+
+    let name = node.name.text
+    let position = Self.lexicalPosition(of: node)
+    let qualifiedName = Self.qualifiedName(for: name, at: position)
+
+    for key in Self.keys(for: name, at: position) {
+      index.enumDefaults[key] = "\(qualifiedName).\(firstCase)"
+    }
+  }
+
+  private func collectNominal<Node>(
+    _ node: Node
+  ) -> SyntaxVisitorContinueKind where
+    Node: DeclGroupSyntax,
+    Node: NamedDeclSyntax,
+    Node: WithAttributesSyntax,
+    Node: WithModifiersSyntax,
+    Node: WithGenericParametersSyntax {
+
+    visitNominal(
+      node: node,
+      name: node.name.text,
+      attributes: node.attributes,
+      modifiers: node.modifiers,
+      isGeneric: node.genericParameterClause != nil,
+      declaration: DeclSyntax(node)
+    )
+
+    return .visitChildren
   }
 
   /// Registers nominal type metadata and records any Previewable annotation.
@@ -166,16 +176,25 @@ private extension DeclarationCollector {
     let keys = Self.keys(for: name, at: position)
     index.declaredTypes.formUnion(keys)
     let access = Self.effectiveAccess(of: node, modifiers: modifiers)
-    for key in keys { index.typeAccess[key] = access }
-    if isGeneric { index.genericTypes.formUnion(keys) }
+
+    for key in keys {
+      index.typeAccess[key] = access
+    }
+    if isGeneric {
+      index.genericTypes.formUnion(keys)
+    }
+
     if attributes.contains(where: {
       guard case .attribute(let attribute) = $0 else { return false }
       return attribute.attributeName.trimmedDescription == "globalActor"
     }) {
       index.globalActors.formUnion(keys)
     }
+
     guard let annotated = Self.annotation(in: attributes) else { return }
-    if annotated.annotation == .fake { index.fakeAnnotatedTypes.formUnion(keys) }
+    if annotated.annotation == .fake {
+      index.fakeAnnotatedTypes.formUnion(keys)
+    }
     record(annotated, declaration: declaration, name: name, position: position, node: node)
   }
 
@@ -229,13 +248,19 @@ private extension DeclarationCollector {
   /// - Parameters:
   ///   - name: The declaration's written name.
   ///   - position: The enclosing type scope, when supported.
-  static func keys(for name: String, at position: LexicalPosition) -> [String] {
+  static func keys(
+    for name: String,
+    at position: LexicalPosition
+  ) -> [String] {
     let qualifiedName = qualifiedName(for: name, at: position)
     return [qualifiedName]
   }
 
   /// Returns the declaration name prefixed by its enclosing types, as the generated file must spell it.
-  static func qualifiedName(for name: String, at position: LexicalPosition) -> String {
+  static func qualifiedName(
+    for name: String,
+    at position: LexicalPosition
+  ) -> String {
     guard case .emittable(let qualifier) = position, !qualifier.isEmpty else { return name }
     return (qualifier + [name]).joined(separator: ".")
   }
@@ -248,6 +273,7 @@ private extension DeclarationCollector {
         return element.name.text
       }
     }
+
     return nil
   }
 
@@ -260,10 +286,11 @@ private extension DeclarationCollector {
   ) -> (annotation: PreviewableAnnotation, attribute: AttributeSyntax)? {
     for element in attributes {
       guard case .attribute(let attribute) = element,
-        let annotation = PreviewableAnnotation(
-          rawValue: attribute.attributeName.trimmedDescription.replacingOccurrences(of: "Mercury.", with: "")
-        )
+            let annotation = PreviewableAnnotation(
+              rawValue: attribute.attributeName.trimmedDescription.replacingOccurrences(of: "Mercury.", with: "")
+            )
       else { continue }
+
       return (annotation, attribute)
     }
     return nil
@@ -275,60 +302,71 @@ private extension DeclarationCollector {
     var current = node.parent
 
     while let parent = current {
-      if let modifiers = typeModifiers(of: parent), modifiers.isFileScoped {
-        return .unsupported(reason: "inside a private or fileprivate type")
+      if let reason = unsupportedScopeReason(in: parent) {
+        return .unsupported(reason: reason)
       }
-      if parent.is(ExtensionDeclSyntax.self) {
-        return .unsupported(reason: "inside an extension")
-      }
-      if parent.is(IfConfigDeclSyntax.self) {
-        return .unsupported(reason: "inside a #if block")
-      }
-      if parent.is(FunctionDeclSyntax.self)
-        || parent.is(InitializerDeclSyntax.self)
-        || parent.is(ClosureExprSyntax.self)
-        || parent.is(AccessorDeclSyntax.self)
-      {
-        return .unsupported(reason: "inside a function body")
-      }
-      if let structure = parent.as(StructDeclSyntax.self) {
-        qualifier.insert(structure.name.text, at: 0)
-      } else if let classDeclaration = parent.as(ClassDeclSyntax.self) {
-        qualifier.insert(classDeclaration.name.text, at: 0)
-      } else if let enumeration = parent.as(EnumDeclSyntax.self) {
-        qualifier.insert(enumeration.name.text, at: 0)
-      } else if let actorDeclaration = parent.as(ActorDeclSyntax.self) {
-        qualifier.insert(actorDeclaration.name.text, at: 0)
+      if let name = nominalName(in: parent) {
+        qualifier.insert(name, at: 0)
       }
       current = parent.parent
     }
+
     return .emittable(qualifier: qualifier)
+  }
+
+  private static func unsupportedScopeReason(in parent: Syntax) -> String? {
+    if let modifiers = typeModifiers(of: parent), modifiers.isFileScoped {
+      return "inside a private or fileprivate type"
+    }
+    return switch parent.as(SyntaxEnum.self) {
+    case .extensionDecl: "inside an extension"
+    case .ifConfigDecl: "inside a #if block"
+    case .functionDecl, .initializerDecl, .closureExpr, .accessorDecl: "inside a function body"
+    default: nil
+    }
+  }
+
+  private static func nominalName(in node: Syntax) -> String? {
+    switch node.as(SyntaxEnum.self) {
+    case .structDecl(let declaration): declaration.name.text
+    case .classDecl(let declaration): declaration.name.text
+    case .enumDecl(let declaration): declaration.name.text
+    case .actorDecl(let declaration): declaration.name.text
+    default: nil
+    }
   }
 
   /// Returns the narrowest access level among a declaration and its enclosing types.
   /// - Parameters:
   ///   - node: The declaration whose parent chain is inspected.
   ///   - modifiers: The declaration's own access modifiers.
-  private static func effectiveAccess(of node: some SyntaxProtocol, modifiers: DeclModifierListSyntax) -> AccessLevel {
+  private static func effectiveAccess(
+    of node: some SyntaxProtocol,
+    modifiers: DeclModifierListSyntax
+  ) -> AccessLevel {
     var access = AccessLevel(modifiers: modifiers)
     var current = node.parent
+
     while let parent = current {
       if let modifiers = typeModifiers(of: parent) {
         access = min(access, AccessLevel(modifiers: modifiers))
       }
       current = parent.parent
     }
+
     return access
   }
 
   /// Returns access modifiers for a nominal type ancestor.
   /// - Parameter node: The syntax ancestor to inspect.
   private static func typeModifiers(of node: Syntax) -> DeclModifierListSyntax? {
-    if let node = node.as(StructDeclSyntax.self) { return node.modifiers }
-    if let node = node.as(ClassDeclSyntax.self) { return node.modifiers }
-    if let node = node.as(EnumDeclSyntax.self) { return node.modifiers }
-    if let node = node.as(ActorDeclSyntax.self) { return node.modifiers }
-    if let node = node.as(ProtocolDeclSyntax.self) { return node.modifiers }
-    return nil
+    switch node.as(SyntaxEnum.self) {
+    case .structDecl(let declaration): declaration.modifiers
+    case .classDecl(let declaration): declaration.modifiers
+    case .enumDecl(let declaration): declaration.modifiers
+    case .actorDecl(let declaration): declaration.modifiers
+    case .protocolDecl(let declaration): declaration.modifiers
+    default: nil
+    }
   }
 }

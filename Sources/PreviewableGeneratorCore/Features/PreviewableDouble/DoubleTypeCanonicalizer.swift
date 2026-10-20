@@ -19,7 +19,12 @@ final class DoubleTypeCanonicalizer: SyntaxRewriter {
   ///   - scope: The enclosing declaration names.
   ///   - substitutions: Generic parameter names mapped to stable positional names.
   ///   - visited: Aliases already being expanded, used to reject cycles.
-  init(index: ModuleIndex, scope: [String], substitutions: [String: String] = [:], visited: Set<String> = []) {
+  init(
+    index: ModuleIndex,
+    scope: [String],
+    substitutions: [String: String] = [:],
+    visited: Set<String> = []
+  ) {
     self.index = index
     self.scope = scope
     self.substitutions = substitutions
@@ -39,15 +44,18 @@ final class DoubleTypeCanonicalizer: SyntaxRewriter {
   /// - Throws: When a local type alias is cyclic.
   func resolved(_ type: TypeSyntax) throws -> TypeSyntax {
     let result = rewrite(type).cast(TypeSyntax.self)
-    if let failure { throw failure }
-    return result
+    guard let failure else { return result }
+    throw failure
   }
 
   /// Rewrites an identifier while preserving generic shadowing and external type identities.
   override func visit(_ node: IdentifierTypeSyntax) -> TypeSyntax {
     let rewritten = super.visit(node)
     let name = node.name.text
-    if let replacement = substitutions[name] { return parsed(replacement, fallback: rewritten) }
+
+    if let replacement = substitutions[name] {
+      return parsed(replacement, fallback: rewritten)
+    }
     if let resolved = index.resolve(name, scope: scope) {
       if let alias = index.typeAliases[resolved], node.genericArgumentClause == nil {
         return expand(alias, named: resolved, fallback: rewritten)
@@ -58,25 +66,31 @@ final class DoubleTypeCanonicalizer: SyntaxRewriter {
     if Self.standardTypes.contains(name) {
       return parsed("Swift." + rewritten.trimmedDescription, fallback: rewritten)
     }
+
     return rewritten
   }
 
   /// Expands qualified local aliases without guessing the contents of imported modules.
   override func visit(_ node: MemberTypeSyntax) -> TypeSyntax {
     let name = node.trimmedDescription
-    if let replacement = substitutions[name] { return parsed(replacement, fallback: TypeSyntax(node)) }
+
+    if let replacement = substitutions[name] {
+      return parsed(replacement, fallback: TypeSyntax(node))
+    }
     if let resolved = index.resolve(name, scope: scope), let alias = index.typeAliases[resolved] {
       return expand(alias, named: resolved, fallback: TypeSyntax(node))
     }
     // A module qualifier is not an independently resolvable type name.
-    if node.baseType.trimmedDescription == "Swift", index.resolve("Swift", scope: scope) == nil {
-      var result = node
-      if let arguments = node.genericArgumentClause {
-        result.genericArgumentClause = rewrite(arguments).cast(GenericArgumentClauseSyntax.self)
-      }
-      return TypeSyntax(result)
+    guard node.baseType.trimmedDescription == "Swift", index.resolve("Swift", scope: scope) == nil
+    else { return super.visit(node) }
+
+    var result = node
+
+    if let arguments = node.genericArgumentClause {
+      result.genericArgumentClause = rewrite(arguments).cast(GenericArgumentClauseSyntax.self)
     }
-    return super.visit(node)
+
+    return TypeSyntax(result)
   }
 
   /// Normalizes array sugar to its standard-library nominal type.
@@ -88,7 +102,8 @@ final class DoubleTypeCanonicalizer: SyntaxRewriter {
   override func visit(_ node: DictionaryTypeSyntax) -> TypeSyntax {
     parsed(
       "Swift.Dictionary<\(rewrite(node.key).trimmedDescription), \(rewrite(node.value).trimmedDescription)>",
-      fallback: TypeSyntax(node))
+      fallback: TypeSyntax(node)
+    )
   }
 
   /// Normalizes optional sugar while retaining its wrapped type.
@@ -98,10 +113,13 @@ final class DoubleTypeCanonicalizer: SyntaxRewriter {
 
   /// Normalizes empty and parenthesized tuple types.
   override func visit(_ node: TupleTypeSyntax) -> TypeSyntax {
-    if node.elements.isEmpty { return parsed("Swift.Void", fallback: TypeSyntax(node)) }
+    if node.elements.isEmpty {
+      return parsed("Swift.Void", fallback: TypeSyntax(node))
+    }
     if node.elements.count == 1, let element = node.elements.first, element.firstName == nil {
       return rewrite(element.type).cast(TypeSyntax.self)
     }
+
     return super.visit(node)
   }
 
@@ -112,14 +130,20 @@ final class DoubleTypeCanonicalizer: SyntaxRewriter {
   }
 
   /// Expands an alias using the scope where the alias was declared.
-  private func expand(_ alias: TypeSyntax, named name: String, fallback: TypeSyntax) -> TypeSyntax {
+  private func expand(
+    _ alias: TypeSyntax,
+    named name: String,
+    fallback: TypeSyntax
+  ) -> TypeSyntax {
     guard !visited.contains(name) else {
       failure = .message("encountered cyclic type alias '\(name)'")
       return fallback
     }
     let resolver = DoubleTypeCanonicalizer(
-      index: index, scope: name.split(separator: ".").dropLast().map(String.init),
-      visited: visited.union([name]))
+      index: index,
+      scope: name.split(separator: ".").dropLast().map(String.init),
+      visited: visited.union([name])
+    )
     do { return try resolver.resolved(alias) } catch let error as GenerationError {
       failure = error
     } catch { failure = .message(String(describing: error)) }
@@ -127,7 +151,10 @@ final class DoubleTypeCanonicalizer: SyntaxRewriter {
   }
 
   /// Parses a canonical spelling whose syntax is derived from already parsed types.
-  private func parsed(_ text: String, fallback: TypeSyntax) -> TypeSyntax {
+  private func parsed(
+    _ text: String,
+    fallback: TypeSyntax
+  ) -> TypeSyntax {
     TypeSyntax.parsed(from: text) ?? fallback
   }
 
@@ -137,48 +164,6 @@ final class DoubleTypeCanonicalizer: SyntaxRewriter {
     "Array", "Dictionary", "Set", "Optional", "Result", "AnyObject", "Sendable", "Error",
     "Hashable", "Equatable", "Codable", "Encodable", "Decodable", "Sequence", "Collection",
     "BidirectionalCollection", "RandomAccessCollection", "MutableCollection", "RangeReplaceableCollection",
-    "IteratorProtocol", "Comparable", "Identifiable", "RawRepresentable", "CaseIterable",
+    "IteratorProtocol", "Comparable", "Identifiable", "RawRepresentable", "CaseIterable"
   ]
-}
-
-/// Substitutes associated-type references without rewriting requirement names or method-local generic parameters.
-final class DoubleTypeSubstitution: SyntaxRewriter {
-  private var bindings: [String: String]
-
-  /// Creates a rewriter for resolved associated-type bindings.
-  /// - Parameter bindings: Associated names mapped to generic parameters or concrete types.
-  init(_ bindings: [String: String]) {
-    self.bindings = bindings
-    super.init(viewMode: .sourceAccurate)
-  }
-
-  override func visit(_ node: IdentifierTypeSyntax) -> TypeSyntax {
-    if let replacement = bindings[node.name.text], let type = TypeSyntax.parsed(from: replacement) {
-      return type.with(\.leadingTrivia, node.leadingTrivia).with(\.trailingTrivia, node.trailingTrivia)
-    }
-    return super.visit(node)
-  }
-
-  override func visit(_ node: MemberTypeSyntax) -> TypeSyntax {
-    if node.baseType.trimmedDescription == "Self", let replacement = bindings[node.name.text],
-      let type = TypeSyntax.parsed(from: replacement)
-    {
-      return type.with(\.leadingTrivia, node.leadingTrivia).with(\.trailingTrivia, node.trailingTrivia)
-    }
-    return super.visit(node)
-  }
-
-  override func visit(_ node: FunctionDeclSyntax) -> DeclSyntax {
-    let previous = bindings
-    for parameter in node.genericParameterClause?.parameters ?? [] { bindings.removeValue(forKey: parameter.name.text) }
-    defer { bindings = previous }
-    return super.visit(node)
-  }
-
-  override func visit(_ node: SubscriptDeclSyntax) -> DeclSyntax {
-    let previous = bindings
-    for parameter in node.genericParameterClause?.parameters ?? [] { bindings.removeValue(forKey: parameter.name.text) }
-    defer { bindings = previous }
-    return super.visit(node)
-  }
 }

@@ -36,7 +36,8 @@ struct PreviewableFakeBehaviourTests {
 
     #expect(
       result != UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
-      "The identifier default must differ from the zero UUID.")
+      "The identifier default must differ from the zero UUID."
+    )
   }
 
   @Test
@@ -48,9 +49,11 @@ struct PreviewableFakeBehaviourTests {
 
   @Test
   func fake_externalMemberIsOptional_defaultIsNil() {
+    let expected: String? = nil
+
     let result = URLQueryItem.fake(name: "symbol").value
 
-    #expect(result == nil, "An external optional parameter must default to nil.")
+    #expect(result == expected, "An external optional parameter must default to nil.")
   }
 
   @Test

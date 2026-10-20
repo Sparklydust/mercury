@@ -5,9 +5,9 @@
 import SwiftSyntaxMacroExpansion
 import Testing
 #if canImport(PreviewableMacrosTestsSupport)
-@testable import PreviewableMacrosTestsSupport
+  @testable import PreviewableMacrosTestsSupport
 #elseif canImport(PreviewableMacrosPlugin)
-@testable import PreviewableMacrosPlugin
+  @testable import PreviewableMacrosPlugin
 #endif
 
 struct PreviewableDoubleMacroTests {

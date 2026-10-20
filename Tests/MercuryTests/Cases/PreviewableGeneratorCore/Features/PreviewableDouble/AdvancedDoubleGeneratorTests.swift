@@ -17,7 +17,7 @@ struct AdvancedDoubleGeneratorTests {
     (
       "<A: Collection, B: Sendable>(_ a: A, _ b: B) where A.Element == B",
       "<X: Collection, Y: Sendable>(_ a: X, _ b: Y) where Y == X.Element"
-    ),
+    )
   ])
   func signatures_equivalentSpellings_emitOneWitness(_ first: String, _ second: String) throws {
     let source = """
@@ -26,11 +26,12 @@ struct AdvancedDoubleGeneratorTests {
       protocol Base { func load\(first) }
       @PreviewableDouble protocol Service: Base { func load\(second) }
       """
+    let expected = 1
 
     let generated = try PreviewableSourceGenerator.generate(from: [source])
     let result = generated.components(separatedBy: "func load").count - 1
 
-    #expect(result == 1, "Equivalent inherited signatures must produce exactly one witness.")
+    #expect(result == expected, "Equivalent inherited signatures must produce exactly one witness.")
   }
 
   @Test
@@ -44,11 +45,12 @@ struct AdvancedDoubleGeneratorTests {
         }
       }
       """
+    let expected = 2
 
     let generated = try PreviewableSourceGenerator.generate(from: [source])
     let result = generated.components(separatedBy: "func load").count - 1
 
-    #expect(result == 2, "A locally declared Int must remain distinct from Swift.Int.")
+    #expect(result == expected, "A locally declared Int must remain distinct from Swift.Int.")
   }
 
   @Test
@@ -57,7 +59,7 @@ struct AdvancedDoubleGeneratorTests {
       "func load<Value: Encodable & Sendable>(_ value: Value) -> Int",
       "func load<Other: Decodable & Sendable>(_ value: Other) -> Int",
       "func load(_ value: Int) -> String",
-      "func load(_ value: Int) -> Int",
+      "func load(_ value: Int) -> Int"
     ]
 
     let results = try [members, Array(members.reversed())].map { ordered in
@@ -79,12 +81,13 @@ struct AdvancedDoubleGeneratorTests {
         func loadInt() -> Int
       }
       """
+    let expected = 3
 
     let generated = try PreviewableSourceGenerator.generate(from: [source])
     let names = generated.split(separator: "\n").filter { $0.contains("var load") }.map(String.init)
     let result = Set(names).count
 
-    #expect(result == 3, "A method named like another overload's stub must get independent storage.")
+    #expect(result == expected, "A method named like another overload's stub must get independent storage.")
   }
 
   @Test

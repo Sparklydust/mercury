@@ -20,50 +20,37 @@ enum PreviewableDoubleRenderer {
     index: ModuleIndex,
     resolver: inout DefaultValueResolver
   ) throws -> GeneratedDouble {
-    guard !declaration.modifiers.isFileScoped else {
-      throw GenerationError.message("@PreviewableDouble cannot access a private or fileprivate protocol")
-    }
-    let isolated = DoubleStorageBuilder.isIsolated(declaration, index: index)
-    let sendable = isolated || GenericResponseValidator.impliesSendable(
-      TypeSyntax(IdentifierTypeSyntax(name: .identifier(qualifiedName))), index: index)
-    let protocolName = declaration.name.text
-    let doubleName = PreviewableDoubleNaming.doubleName(for: protocolName)
-    guard index.typeAccess[doubleName] == nil else {
-      throw GenerationError.message(
-        "@PreviewableDouble generated type '\(doubleName)' conflicts with an existing declaration")
-    }
-    let access = index.accessPrefix(for: qualifiedName)
-    var visited: Set<String> = []
-    let originalMembers = try PreviewableRequirementFlattener.requirements(
-      of: declaration, index: index, visited: &visited)
-    let associated = try DoubleAssociatedTypes(
-      declaration: declaration, members: originalMembers, index: index,
-      isolated: isolated, sendable: sendable)
-    let rewriter = DoubleTypeSubstitution(associated.bindings)
-    let members = originalMembers.filter { !$0.decl.is(AssociatedTypeDeclSyntax.self) }
-      .map { rewriter.rewrite($0).cast(MemberBlockItemSyntax.self) }
-    resolver.genericParameters = Set(associated.parameters)
+    let definition = try DoubleDefinition.resolve(from: declaration, qualifiedName: qualifiedName, index: index)
+    resolver.genericParameters = Set(definition.associated.parameters)
     defer { resolver.genericParameters = [] }
-    let requirements = try DoubleRequirement.collect(
-      members, index: index,
-      scope: qualifiedName.split(separator: ".").map(String.init),
-      defaultIsolation: protocolIsolation(declaration, index: index))
-
-    let recordings = try actorRecordings(in: members, index: index)
+    let requirements = try definition.requirements()
+    let recordings = try actorRecordings(in: definition.members, index: definition.index)
     try validateNames(in: requirements, recordings: Set(recordings.keys))
     let generated = try PreviewableDoubleRequirementsBuilder.generate(
-      requirements: requirements, access: access, isolated: isolated, sendable: sendable,
-      index: index, resolver: &resolver)
+      requirements: requirements,
+      access: definition.access,
+      isolated: definition.isolated,
+      sendable: definition.sendable,
+      index: definition.index,
+      resolver: &resolver
+    )
     return render(
-      declaration: declaration, qualifiedName: qualifiedName, index: index, associated: associated,
-      requirements: requirements, recordings: recordings, generated: generated, sendable: sendable)
+      definition: definition,
+      requirements: requirements,
+      recordings: recordings,
+      generated: generated
+    )
   }
 }
 
 private extension PreviewableDoubleRenderer {
 
-  static func actorRecordings(in members: [MemberBlockItemSyntax], index: ModuleIndex) throws -> [String: String] {
+  static func actorRecordings(
+    in members: [MemberBlockItemSyntax],
+    index: ModuleIndex
+  ) throws -> [String: String] {
     var recordings: [String: String] = [:]
+
     for member in members {
       let attributes =
         member.decl.as(FunctionDeclSyntax.self)?.attributes
@@ -72,51 +59,39 @@ private extension PreviewableDoubleRenderer {
         ?? member.decl.as(VariableDeclSyntax.self)?.attributes
       guard let attributes else { continue }
       let isolation = DoubleStorageBuilder.isolationAttributes(in: attributes, index: index)
+
       guard !isolation.isEmpty else { continue }
       let name = DoubleStorageBuilder.recordingName(for: isolation)
+
       if let existing = recordings[name], existing != isolation {
         throw GenerationError.message("@PreviewableDouble actor recording '\(name)' conflicts with another actor")
       }
       recordings[name] = isolation
     }
+
     return recordings
   }
 
   static func render(
-    declaration: ProtocolDeclSyntax, qualifiedName: String, index: ModuleIndex, associated: DoubleAssociatedTypes,
-    requirements: [DoubleRequirement], recordings: [String: String],
-    generated: GeneratedDoubleRequirements, sendable: Bool
+    definition: DoubleDefinition,
+    requirements: [DoubleRequirement],
+    recordings: [String: String],
+    generated: GeneratedDoubleRequirements
   ) -> GeneratedDouble {
-    let protocolName = declaration.name.text
+    let protocolName = definition.declaration.name.text
     let doubleName = PreviewableDoubleNaming.doubleName(for: protocolName)
-    let access = index.accessPrefix(for: qualifiedName)
-    var sections: [String] = ["nonisolated private let _previewableLock = NSRecursiveLock()"]
-    if !associated.bindings.isEmpty { sections.append(associated.aliases(access: access)) }
-    if requirements.contains(where: \.isStatic) {
-      sections += DoubleStaticBuilder.declarations(
-        stubs: generated.staticStubs, recordings: recordings, access: access,
-        isolation: protocolIsolation(declaration, index: index))
-    }
-    if !generated.stubs.isEmpty {
-      sections.append(
-        (["// Mock values"] + generated.stubs).joined(separator: "\n")
-      )
-    }
-    let sharedPreview = sendable && associated.parameters.isEmpty
-    sections.append(previewDeclaration(access: access, doubleName: doubleName, shared: sharedPreview))
-    sections.append("\(access)nonisolated init() {}")
-    sections += recordingDeclarations(access: access, recordings: recordings)
-    if !generated.declarations.isEmpty {
-      sections.append(
-        (["// Protocol requirements"] + generated.declarations)
-          .joined(separator: "\n")
-      )
-    }
-
+    let access = definition.access
+    let sharedPreview = definition.sharedPreview
+    let sections = bodySections(
+      definition: definition,
+      requirements: requirements,
+      recordings: recordings,
+      generated: generated
+    )
     let body = sections.map { $0.indented(by: 2) }.joined(separator: "\n\n")
     let classSignature =
-      "\(access)final class \(doubleName)\(associated.genericClause): "
-      + "\(qualifiedName)\(sendable ? ", @unchecked Sendable" : "")\(associated.whereClause)"
+      "\(access)final class \(doubleName)\(definition.associated.genericClause): "
+      + "\(definition.qualifiedName)\(definition.sendable ? ", @unchecked Sendable" : "")\(definition.associated.whereClause)"
     let generatedDeclaration = """
       /// A test double for `\(protocolName)`.
       ///
@@ -129,12 +104,56 @@ private extension PreviewableDoubleRenderer {
       """
     let doubleAccessorName = doubleName.lowercasingFirstCharacter
     let previewConfiguration = previewAccessor(
-      access: access, doubleName: doubleName, qualifiedName: qualifiedName, shared: sharedPreview)
+      access: access,
+      doubleName: doubleName,
+      qualifiedName: definition.qualifiedName,
+      shared: sharedPreview
+    )
     return GeneratedDouble(
       declaration: generatedDeclaration,
-      previewConfiguration: associated.parameters.isEmpty ? previewConfiguration : "",
-      globalNames: [doubleName] + (associated.parameters.isEmpty ? [doubleAccessorName] : [])
+      previewConfiguration: definition.associated.parameters.isEmpty ? previewConfiguration : "",
+      globalNames: [doubleName] + (definition.associated.parameters.isEmpty ? [doubleAccessorName] : [])
     )
+  }
+
+  static func bodySections(
+    definition: DoubleDefinition,
+    requirements: [DoubleRequirement],
+    recordings: [String: String],
+    generated: GeneratedDoubleRequirements
+  ) -> [String] {
+    let access = definition.access
+    let doubleName = definition.doubleName
+    let sharedPreview = definition.sharedPreview
+    var sections: [String] = ["nonisolated private let _previewableLock = NSRecursiveLock()"]
+
+    if !definition.associated.bindings.isEmpty {
+      sections.append(definition.associated.aliases(access: access))
+    }
+    if requirements.contains(where: \.isStatic) {
+      sections += DoubleStaticBuilder.declarations(
+        stubs: generated.staticStubs,
+        recordings: recordings,
+        access: access,
+        isolation: definition.isolation
+      )
+    }
+    if !generated.stubs.isEmpty {
+      sections.append(
+        (["// Mock values"] + generated.stubs).joined(separator: "\n")
+      )
+    }
+    sections.append(previewDeclaration(access: access, doubleName: doubleName, shared: sharedPreview))
+    sections.append("\(access)nonisolated init() {}")
+    sections += recordingDeclarations(access: access, recordings: recordings)
+    if !generated.declarations.isEmpty {
+      sections.append(
+        (["// Protocol requirements"] + generated.declarations)
+          .joined(separator: "\n")
+      )
+    }
+
+    return sections
   }
 
   /// Rejects requirement names that collide with generated storage, stubs, or recording members.
@@ -142,14 +161,32 @@ private extension PreviewableDoubleRenderer {
   ///   - members: The flattened protocol requirements.
   ///   - recordings: Names reserved for actor-isolated argument dictionaries.
   /// - Throws: `GenerationError` when a requirement uses a reserved or generated name.
-  static func validateNames(in members: [DoubleRequirement], recordings: Set<String>) throws {
+  static func validateNames(
+    in members: [DoubleRequirement],
+    recordings: Set<String>
+  ) throws {
     let reserved: Set<String> = Set(["preview", "calledMethods", "passedParameters", "withStaticStubs"]).union(
-      recordings)
+      recordings
+    )
     var generated = reserved
+    let (requirements, stubs) = declaredNames(in: members)
+
+    generated.formUnion(stubs)
+    if let collision = stubs.intersection(recordings).sorted().first {
+      throw GenerationError.message("@PreviewableDouble stub '\(collision)' conflicts with an actor recording")
+    }
+    if let collision = requirements.sorted().first(where: { generated.contains($0) || $0.hasPrefix("_previewable") }) {
+      throw GenerationError.message("@PreviewableDouble requirement '\(collision)' conflicts with a generated member")
+    }
+  }
+
+  static func declaredNames(in members: [DoubleRequirement]) -> (Set<String>, Set<String>) {
     var requirements: Set<String> = []
     var stubs: Set<String> = []
+
     for requirement in members {
       let member = requirement.declaration
+
       if let variable = member.decl.as(VariableDeclSyntax.self) {
         for binding in variable.bindings {
           guard let pattern = binding.pattern.as(IdentifierPatternSyntax.self) else { continue }
@@ -168,82 +205,70 @@ private extension PreviewableDoubleRenderer {
         }
       }
     }
-    generated.formUnion(stubs)
-    if let collision = stubs.intersection(recordings).sorted().first {
-      throw GenerationError.message("@PreviewableDouble stub '\(collision)' conflicts with an actor recording")
-    }
-    if let collision = requirements.sorted().first(where: { generated.contains($0) || $0.hasPrefix("_previewable") }) {
-      throw GenerationError.message("@PreviewableDouble requirement '\(collision)' conflicts with a generated member")
-    }
+    return (requirements, stubs)
   }
 
-  /// Finds the protocol's declared or inherited global actor for its scoped static state.
-  static func protocolIsolation(
-    _ declaration: ProtocolDeclSyntax, index: ModuleIndex, visited: Set<String> = []
+  static func previewDeclaration(
+    access: String,
+    doubleName: String,
+    shared: Bool
   ) -> String {
-    let name = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
-    guard !visited.contains(name) else { return "" }
-    let scope = name.split(separator: ".").map(String.init)
-    let own = DoubleStorageBuilder.isolationAttributes(in: declaration.attributes, index: index, scope: scope)
-    if !own.isEmpty { return own }
-    for inherited in declaration.inheritanceClause?.inheritedTypes ?? [] {
-      if let key = index.resolve(inherited.type.trimmedDescription, scope: scope), let base = index.protocols[key] {
-        let isolation = protocolIsolation(base, index: index, visited: visited.union([name]))
-        if !isolation.isEmpty { return isolation }
-      }
-    }
-    return ""
+
+    ([
+      "// Preview value",
+      shared
+        ? "/// The shared double used by previews."
+        : "/// A fresh double for each preview access.",
+      "///",
+      shared
+        ? "/// Instantiated once; configured stubs and recorded calls persist between accesses."
+        : "/// Keep the returned instance to retain configured stubs and recorded calls.",
+      "/// - Important: Use this value only from SwiftUI previews.",
+      shared
+        ? "\(access)nonisolated static let preview = \(doubleName)()"
+        : "\(access)nonisolated static var preview: \(doubleName) { \(doubleName)() }"
+    ].joined(separator: "\n"))
   }
 
-  static func previewDeclaration(access: String, doubleName: String, shared: Bool) -> String {
-    return (
-      [
-        "// Preview value",
-        shared
-          ? "/// The shared double used by previews."
-          : "/// A fresh double for each preview access.",
-        "///",
-        shared
-          ? "/// Instantiated once; configured stubs and recorded calls persist between accesses."
-          : "/// Keep the returned instance to retain configured stubs and recorded calls.",
-        "/// - Important: Use this value only from SwiftUI previews.",
-        shared
-          ? "\(access)nonisolated static let preview = \(doubleName)()"
-          : "\(access)nonisolated static var preview: \(doubleName) { \(doubleName)() }",
-      ].joined(separator: "\n")
-    )
-  }
-
-  static func recordingDeclarations(access: String, recordings: [String: String]) -> [String] {
+  static func recordingDeclarations(
+    access: String,
+    recordings: [String: String]
+  ) -> [String] {
     var sections: [String] = []
     sections.append(
       [
         "// Spy values",
         DoubleStorageBuilder.property(
-          name: "calledMethods", type: "[String]", value: "[]", access: access + "private(set) ", isolated: true,
-          documentation: "The protocol method names invoked on this double.", nonisolated: true
+          name: "calledMethods",
+          type: "[String]",
+          value: "[]",
+          access: access + "private(set) ",
+          isolated: true,
+          documentation: "The protocol method names invoked on this double.",
+          nonisolated: true
         ),
         DoubleStorageBuilder.property(
-          name: "passedParameters", type: "[String: [[Any?]]]", value: "[:]", access: access + "private(set) ",
+          name: "passedParameters",
+          type: "[String: [[Any?]]]",
+          value: "[:]",
+          access: access + "private(set) ",
           isolated: true,
           documentation: "The arguments recorded in the protocol's isolation, grouped by method.",
           sharedBacking: true
-        ),
+        )
       ].joined(separator: "\n")
     )
-    for name in recordings.keys.sorted() {
-      sections.append(
-        DoubleStorageBuilder.property(
-          name: name, type: "[String: [[Any?]]]", value: "[:]", access: access + "private(set) ", isolated: true,
-          documentation: "The arguments recorded by requirements isolated to this actor, grouped by method.",
-          isolation: recordings[name] ?? ""
-        )
-      )
-    }
+    sections += actorRecordingDeclarations(recordings: recordings, access: access)
+
     return sections
   }
 
-  static func previewAccessor(access: String, doubleName: String, qualifiedName: String, shared: Bool) -> String {
+  static func previewAccessor(
+    access: String,
+    doubleName: String,
+    qualifiedName: String,
+    shared: Bool
+  ) -> String {
     let doubleAccessorName = doubleName.lowercasingFirstCharacter
     return """
       #if DEBUG
@@ -266,5 +291,25 @@ private extension PreviewableDoubleRenderer {
       #endif
       """
   }
+  static func actorRecordingDeclarations(
+    recordings: [String: String],
+    access: String
+  ) -> [String] {
+    var sections: [String] = []
 
+    for name in recordings.keys.sorted() {
+      sections.append(
+        DoubleStorageBuilder.property(
+          name: name,
+          type: "[String: [[Any?]]]",
+          value: "[:]",
+          access: access + "private(set) ",
+          isolated: true,
+          documentation: "The arguments recorded by requirements isolated to this actor, grouped by method.",
+          isolation: recordings[name] ?? ""
+        )
+      )
+    }
+    return sections
+  }
 }

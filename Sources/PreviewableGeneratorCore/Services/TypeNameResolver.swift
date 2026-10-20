@@ -16,7 +16,11 @@ final class TypeNameResolver: SyntaxRewriter {
   ///   - index: The module declarations available for name lookup.
   ///   - scope: Enclosing type names, ordered from outermost to innermost.
   ///   - genericParameters: Names excluded from module lookup.
-  init(index: ModuleIndex, scope: [String], genericParameters: Set<String> = []) {
+  init(
+    index: ModuleIndex,
+    scope: [String],
+    genericParameters: Set<String> = []
+  ) {
     self.index = index
     self.scope = scope
     self.genericParameters = genericParameters
@@ -25,17 +29,20 @@ final class TypeNameResolver: SyntaxRewriter {
   override func visit(_ node: IdentifierTypeSyntax) -> TypeSyntax {
     let rewritten = super.visit(node)
     let name = node.name.text
+
     guard !genericParameters.contains(name),
-      let qualified = index.resolve(name, scope: scope), qualified != name,
-      let identifier = rewritten.as(IdentifierTypeSyntax.self),
-      let result = TypeSyntax.parsed(from: qualified + (identifier.genericArgumentClause?.trimmedDescription ?? ""))
+          let qualified = index.resolve(name, scope: scope), qualified != name,
+          let identifier = rewritten.as(IdentifierTypeSyntax.self),
+          let result = TypeSyntax.parsed(from: qualified + (identifier.genericArgumentClause?.trimmedDescription ?? ""))
     else { return rewritten }
+
     return result.with(\.leadingTrivia, node.leadingTrivia).with(\.trailingTrivia, node.trailingTrivia)
   }
 
   override func visit(_ node: FunctionDeclSyntax) -> DeclSyntax {
     let local = TypeNameResolver(
-      index: index, scope: scope,
+      index: index,
+      scope: scope,
       genericParameters: genericParameters.union(node.genericParameterClause?.parameters.map(\.name.text) ?? [])
     )
     var result = node
@@ -47,14 +54,17 @@ final class TypeNameResolver: SyntaxRewriter {
     if let constraints = node.genericWhereClause {
       result.genericWhereClause = local.rewrite(constraints).cast(GenericWhereClauseSyntax.self)
     }
+
     return DeclSyntax(result)
   }
 
   /// Keeps subscript generic parameters local when qualifying index and response types.
   override func visit(_ node: SubscriptDeclSyntax) -> DeclSyntax {
     let local = TypeNameResolver(
-      index: index, scope: scope,
-      genericParameters: genericParameters.union(node.genericParameterClause?.parameters.map(\.name.text) ?? []))
+      index: index,
+      scope: scope,
+      genericParameters: genericParameters.union(node.genericParameterClause?.parameters.map(\.name.text) ?? [])
+    )
     var result = node
     result.attributes = local.rewrite(node.attributes).cast(AttributeListSyntax.self)
     if let generics = node.genericParameterClause {
@@ -65,6 +75,7 @@ final class TypeNameResolver: SyntaxRewriter {
     if let constraints = node.genericWhereClause {
       result.genericWhereClause = local.rewrite(constraints).cast(GenericWhereClauseSyntax.self)
     }
+
     return DeclSyntax(result)
   }
 }

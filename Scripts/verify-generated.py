@@ -369,6 +369,11 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
   verify('static-non-sendable-argument',
     'final class Payload {}\n@PreviewableDouble protocol ServiceProtocol { static func store(_ value: Payload) }',
     compile_error='Sendable')
+  verify('static-generic-response',
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { '
+    'static func make<Value: Sendable>(_ type: Value.Type) -> Value }',
+    'ServiceDouble.withStaticStubs { ServiceDouble.makeStub.set(42, for: Int.self); '
+    'let value: Int = ServiceDouble.make(Int.self); precondition(value == 42) }')
   verify('static-instance-same-name',
     '@PreviewableDouble protocol ServiceProtocol { static func load() -> Int; func load() -> Int }',
     'ServiceDouble.withStaticStubs { let double = ServiceDouble(); double.loadStub = 1; '

@@ -32,7 +32,7 @@ enum AccessLevel: Int, Comparable {
   init(modifiers: DeclModifierListSyntax) {
     for modifier in modifiers {
       switch modifier.name.text {
-        // `open` is only more permissive than `public` for subclassing, which never affects visibility here.
+      // `open` is only more permissive than `public` for subclassing, which never affects visibility here.
       case "open", "public": self = .public; return
       case "package": self = .package; return
       case "private", "fileprivate": self = .restricted; return

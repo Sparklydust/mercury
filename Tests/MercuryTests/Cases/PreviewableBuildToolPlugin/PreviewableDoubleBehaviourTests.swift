@@ -15,8 +15,8 @@ struct PreviewableDoubleBehaviourTests {
 
   @Test
   func double_titleStubIsAssigned_requirementReturnsStub() {
+    sut.titleStub = "Portfolio"
     let expected = "Portfolio"
-    sut.titleStub = expected
 
     let result = sut.title
 
@@ -25,8 +25,8 @@ struct PreviewableDoubleBehaviourTests {
 
   @Test
   func double_tagsStubIsAssigned_requirementReturnsStub() {
+    sut.tagsStub = ["equity", "bond"]
     let expected = ["equity", "bond"]
-    sut.tagsStub = expected
 
     let result = sut.tags
 
@@ -35,8 +35,8 @@ struct PreviewableDoubleBehaviourTests {
 
   @Test
   func double_stateStubIsAssigned_requirementReturnsStub() {
+    sut.stateStub = LoadingState.loading
     let expected = LoadingState.loading
-    sut.stateStub = expected
 
     let result = sut.state
 
@@ -65,8 +65,8 @@ struct PreviewableDoubleBehaviourTests {
 
   @Test
   func double_methodIsCalled_configuredResponseIsReturned() async throws {
+    sut.loadStub = ["first"]
     let expected = ["first"]
-    sut.loadStub = expected
 
     let result = try await sut.load(page: 7)
 
@@ -109,8 +109,9 @@ struct PreviewableDoubleBehaviourTests {
   @Test
   func double_errorStubIsAssigned_methodThrows() async {
     sut.loadErrorStub = ConstructionError.invalid
+    let expected = ConstructionError.invalid
 
-    await #expect(throws: ConstructionError.invalid) {
+    await #expect(throws: expected) {
       _ = try await sut.load(page: 1)
     }
   }
@@ -136,8 +137,8 @@ struct PreviewableDoubleBehaviourTests {
   @Test
   func double_publicProtocolIsInjected_configuredStubIsReturned() {
     let serviceDouble = PublicServiceDouble()
+    serviceDouble.nameStub = "Markets"
     let expected = "Markets"
-    serviceDouble.nameStub = expected
 
     let injected: any PublicServiceProtocol = serviceDouble
     let result = injected.name
@@ -148,7 +149,6 @@ struct PreviewableDoubleBehaviourTests {
   @Test
   func double_protocolRequiresInitializer_invocationIsRecorded() {
     let expected = ["init(name:)"]
-
     let sut = FactoryDouble(name: "feed")
     let result = sut.calledMethods
 
@@ -158,7 +158,6 @@ struct PreviewableDoubleBehaviourTests {
   @Test
   func double_protocolRequiresInitializer_argumentIsRecorded() {
     let expected = "feed"
-
     let sut = FactoryDouble(name: "feed")
     let result = sut.passedParameters["init(name:)"]?.first?.first as? String
 
