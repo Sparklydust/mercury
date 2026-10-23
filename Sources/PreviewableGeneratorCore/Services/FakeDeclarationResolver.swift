@@ -1,5 +1,5 @@
 //
-// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+// Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
 import SwiftSyntax
@@ -98,13 +98,12 @@ enum FakeDeclarationResolver {
     _ annotation: AnnotatedDeclaration,
     definition: OwnedFakeDefinition
   ) throws {
-    let hasArguments: Bool
-
-    if case .argumentList(let arguments) = annotation.attribute.arguments {
-      hasArguments = !arguments.isEmpty
+    let hasArguments = if case .argumentList(let arguments) = annotation.attribute.arguments {
+      !arguments.isEmpty
     } else {
-      hasArguments = annotation.attribute.arguments != nil
+      annotation.attribute.arguments != nil
     }
+
     guard !hasArguments else {
       throw GenerationError.message(
         "@PreviewableFake reads the stored properties of a type declared in this module — remove 'parameters:'"

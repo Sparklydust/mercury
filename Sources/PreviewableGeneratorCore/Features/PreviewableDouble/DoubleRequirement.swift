@@ -1,5 +1,5 @@
 //
-// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+// Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
 #if canImport(CryptoKit)
@@ -335,13 +335,13 @@ struct DoubleRequirement {
         return copy
       }
     )
-    var effects = ""
-
-    if case .accessors(let accessors)? = declaration.accessorBlock?.accessors {
-      effects = accessors
+    let effects = if case .accessors(let accessors)? = declaration.accessorBlock?.accessors {
+      accessors
         .first { $0.accessorSpecifier.text == "get" }?
         .effectSpecifiers?
         .trimmedDescription ?? ""
+    } else {
+      ""
     }
 
     let source = "\(declaration.attributes) \(declaration.modifiers)func _previewableSubscript"

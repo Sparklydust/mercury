@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+#
+# Copyright © 2026 Mercury contributors. MIT licensed.
+#
 """Compile and execute generated consumers in disposable directories."""
 import argparse
 import json

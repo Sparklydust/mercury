@@ -1,3 +1,7 @@
+//
+// Copyright © 2026 Mercury contributors. MIT licensed.
+//
+
 import SwiftSyntax
 
 /// Renders a resolved fake recipe with matching Debug and Release signatures.

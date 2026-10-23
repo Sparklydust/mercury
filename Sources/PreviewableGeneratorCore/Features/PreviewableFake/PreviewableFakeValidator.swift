@@ -1,5 +1,5 @@
 //
-// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+// Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
 import SwiftSyntax
@@ -132,12 +132,10 @@ enum PreviewableFakeValidator {
         type = attributed.baseType
       }
       let name = type.trimmedDescription
-      let isProtocol: Bool
-
-      if let resolved = index.resolve(name, scope: scope) {
-        isProtocol = index.protocols[resolved] != nil
+      let isProtocol = if let resolved = index.resolve(name, scope: scope) {
+        index.protocols[resolved] != nil
       } else {
-        isProtocol = ["Sendable", "Swift.Sendable", "AnyObject", "Swift.AnyObject"].contains(name)
+        ["Sendable", "Swift.Sendable", "AnyObject", "Swift.AnyObject"].contains(name)
       }
 
       guard isProtocol else {

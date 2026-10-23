@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+#
+# Copyright © 2026 Mercury contributors. MIT licensed.
+#
 """Build or verify Mercury's bundled Apple Silicon generator and compiler plugin."""
 import argparse
 import hashlib
@@ -39,7 +42,7 @@ def verify_architectures(executable):
 
 
 def revision_source(checksum):
-  return ('//\n// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.\n//\n\n'
+  return ('//\n// Copyright © 2026 Mercury contributors. MIT licensed.\n//\n\n'
     '/// Identifies the bundled macro implementation and invalidates consumers when it changes.\n'
     f'let bundledMacroRevision = "{checksum}"\n')
 

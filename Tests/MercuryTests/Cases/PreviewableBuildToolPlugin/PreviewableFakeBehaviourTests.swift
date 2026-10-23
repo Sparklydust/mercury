@@ -1,5 +1,5 @@
 //
-// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+// Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
 import Foundation
@@ -58,7 +58,7 @@ struct PreviewableFakeBehaviourTests {
 
   @Test
   func fake_ownerIsProvided_overrideIsApplied() {
-    let expected = "Roland"
+    let expected = "Alex"
 
     let result = Account.fake(owner: expected).owner
 

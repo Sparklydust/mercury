@@ -1,8 +1,8 @@
 //
-// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+// Copyright © 2026 Mercury contributors. MIT licensed.
 //
 //
-// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+// Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
 import Testing

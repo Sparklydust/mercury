@@ -1,3 +1,7 @@
+//
+// Copyright © 2026 Mercury contributors. MIT licensed.
+//
+
 import SwiftSyntax
 
 /// Rejects eager default cycles before generated initializers can recurse or deadlock.

@@ -1,5 +1,5 @@
 //
-// Copyright © 2026 Roland Lariotte. See LICENSE file for terms. All rights reserved.
+// Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
 import SwiftSyntax
@@ -14,14 +14,10 @@ extension FunctionSignatureSyntax {
       return parameter.trimmedDescription
     }
 
-    let printedParameters: String
-
-    if parameters.isEmpty {
-      printedParameters = "()"
-    } else if parameters.count == 1 {
-      printedParameters = "(\(parameters[0]))"
-    } else {
-      printedParameters = "(\n  \(parameters.joined(separator: ",\n  "))\n)"
+    let printedParameters = switch parameters.count {
+    case 0: "()"
+    case 1: "(\(parameters[0]))"
+    default: "(\n  \(parameters.joined(separator: ",\n  "))\n)"
     }
 
     let printedEffects = effectSpecifiers.map { " \($0.trimmedDescription)" } ?? String()
