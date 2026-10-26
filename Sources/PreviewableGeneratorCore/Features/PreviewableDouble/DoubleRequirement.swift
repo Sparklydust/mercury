@@ -97,9 +97,7 @@ struct DoubleRequirement {
       }
       if let position = positions[requirement.identity] {
         // A writable property or subscript also witnesses an inherited read-only declaration.
-        if requirement.isSettable {
-          requirements[position] = requirement
-        }
+        requirements[position] = DoublePropertyRequirementMerger.merge(requirements[position], requirement)
         continue
       }
       positions[requirement.identity] = requirements.count

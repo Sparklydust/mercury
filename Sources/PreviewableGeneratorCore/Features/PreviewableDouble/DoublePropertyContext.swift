@@ -32,6 +32,17 @@ struct DoublePropertyContext {
     guard seen.insert(components.name).inserted else { return nil }
     try validateType(components.type, name: components.name)
     resolver.fieldName = components.name
+
+    if let getter = components.accessors.asyncGetter {
+      return try DoubleAsyncPropertyBuilder.generate(
+        context: self,
+        getter: getter,
+        name: components.name,
+        type: components.type,
+        signature: signature(name: components.name, type: components.type),
+        resolver: &resolver
+      )
+    }
     let value = try DoubleResponseDefaultResolver.resolve(for: components.type, resolver: &resolver)
     let stub = DoubleStorageBuilder.property(
       name: components.name + "Stub",
@@ -75,7 +86,7 @@ struct DoublePropertyContext {
     type: TypeSyntax,
     settable: Bool
   ) -> String {
-    let signature = "\(attributes)\(access)\(modifier)var \(name): \(type.trimmedDescription)"
+    let signature = signature(name: name, type: type)
 
     guard settable else { return "\(signature) { \(name)Stub }" }
     return """
@@ -84,5 +95,9 @@ struct DoublePropertyContext {
         set { \(name)Stub = newValue }
       }
       """
+  }
+
+  private func signature(name: String, type: TypeSyntax) -> String {
+    "\(attributes)\(access)\(modifier)var \(name): \(type.trimmedDescription)"
   }
 }

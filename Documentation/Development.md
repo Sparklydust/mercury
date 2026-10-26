@@ -2,6 +2,14 @@
 
 Run `swift test` locally. macOS CI also verifies bundled tools and generated consumers, runs tests with Thread Sanitizer, and builds Release. Linux CI tests source-built tools, generated consumers, and Release compilation.
 
+Commit `Package.resolved` and the bundled tools together when dependencies change. Environment examples may be committed; local environment files, build output, and Vapor's `db.sqlite` runtime files are ignored.
+
+### Async spy changes
+
+Keep the spy runtime tests under `Cases/Mercury/Features/PreviewableDouble` and generated consumer tests under `Cases/PreviewableBuildToolPlugin`. Cover actor isolation, typed errors, per-invocation snapshots, cancellation, and bounded waits. Coordinate tests through call handles rather than sleeps.
+
+Run `MERCURY_BUILD_GENERATOR_FROM_SOURCE=1 swift test` while editing generation. The test target selects the matching macro implementation explicitly, so switching between source-built and bundled tools does not select stale modules from the build cache.
+
 ### Updating bundled tools
 
 Mercury bundles the generator and macro plugin to avoid compiling them and SwiftSyntax in consumer builds. Consumers do not need to rebuild these binaries.

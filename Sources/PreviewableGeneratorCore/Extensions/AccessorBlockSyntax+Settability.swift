@@ -11,4 +11,12 @@ extension AccessorBlockSyntax {
     guard case .accessors(let declared) = accessors else { return false }
     return declared.contains { $0.accessorSpecifier.tokenKind == .keyword(.set) }
   }
+
+  /// The explicitly async getter, whose effects must be retained by generated witnesses.
+  var asyncGetter: AccessorDeclSyntax? {
+    guard case .accessors(let declared) = accessors else { return nil }
+    return declared.first {
+      $0.accessorSpecifier.tokenKind == .keyword(.get) && $0.effectSpecifiers?.asyncSpecifier != nil
+    }
+  }
 }

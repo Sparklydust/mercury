@@ -4,10 +4,10 @@
 
 import SwiftSyntaxMacroExpansion
 import Testing
-#if canImport(PreviewableMacrosTestsSupport)
-  @testable import PreviewableMacrosTestsSupport
-#elseif canImport(PreviewableMacrosPlugin)
-  @testable import PreviewableMacrosPlugin
+#if MERCURY_BUILD_GENERATOR_FROM_SOURCE && canImport(PreviewableMacrosPlugin)
+@testable import PreviewableMacrosPlugin
+#elseif canImport(PreviewableMacrosTestsSupport)
+@testable import PreviewableMacrosTestsSupport
 #endif
 
 struct PreviewableFakeMacroTests {

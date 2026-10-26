@@ -25,13 +25,21 @@ struct DoubleMethodContext {
   private var memberIsolated: Bool { !nonisolated && (isolated || !isolation.isEmpty) }
   private var requiresSendable: Bool { sendable && !memberIsolated }
   private var isGeneric: Bool { function.genericParameterClause != nil }
+  private var genericNames: Set<String> { Set(function.genericParameterClause?.parameters.map(\.name.text) ?? []) }
+  private var isAsync: Bool { function.signature.effectSpecifiers?.asyncSpecifier != nil }
   private var throwsClause: ThrowsClauseSyntax? { function.signature.effectSpecifiers?.throwsClause }
   // A rethrows witness can only forward errors from its own closure argument.
   private var isThrowing: Bool {
     throwsClause != nil && throwsClause?.throwsSpecifier.tokenKind != .keyword(.rethrows)
   }
   private var returnType: TypeSyntax? { function.signature.returnClause?.type }
-  private var returnsValue: Bool { returnType.map { !DefaultValueResolver.isVoid($0) } ?? false }
+  private var returnsValue: Bool {
+    guard let returnType else { return false }
+    return genericNames.contains(returnType.trimmedDescription) || !DefaultValueResolver.isVoid(returnType)
+  }
+  private var thrownType: String {
+    throwsClause?.type?.trimmedDescription ?? (genericNames.contains("Error") ? "any Swift.Error" : "any Error")
+  }
 
   func validateSignature() throws {
     let signatureTypes =
@@ -66,14 +74,21 @@ struct DoubleMethodContext {
   func stubDeclarations(
     resolver: inout DefaultValueResolver
   ) throws -> [String] {
-    try errorDeclarations() + responseDeclarations(resolver: &resolver)
+    try errorDeclarations() + responseDeclarations(resolver: &resolver) + spyDeclarations()
+  }
+
+  private func spyDeclarations() -> [String] {
+    guard isAsync else { return [] }
+    return [
+      """
+      /// Observes calls and optionally pauses their captured responses until resumed.
+      \(isolation)\(access)\(nonisolated ? "nonisolated " : "")let \(stub)Spy: Mercury.PreviewableAsyncSpy = .init()
+      """
+    ]
   }
 
   private func errorDeclarations() throws -> [String] {
     guard isThrowing else { return [] }
-
-    let thrownType = throwsClause?.type?.trimmedDescription ?? "any Error"
-    let genericNames = Set(function.genericParameterClause?.parameters.map(\.name.text) ?? [])
 
     if let type = throwsClause?.type, !genericNames.isDisjoint(with: type.writtenTypeNames) {
       throw GenerationError.message("@PreviewableDouble does not support a generic thrown error type")
@@ -177,25 +192,37 @@ struct DoubleMethodContext {
   }
 
   func requirement(parameters: [String]) -> String {
-    let body = invocationBody(parameters: parameters)
-    let effects = isThrowing ? " " + (throwsClause?.trimmedDescription ?? "throws") : ""
-    let output = returnType?.trimmedDescription ?? "Void"
-    let closureSignature = "()\(effects) -> \(output) in"
-    let call = "\(returnsValue ? "return " : "")\(isThrowing ? "try " : "")"
-    + "Mercury.previewableWithLock(\(receiver)._previewableLock) { \(closureSignature)"
-
-    let methodBody = ([call] + body.map { "  " + $0 } + ["}"]).joined(separator: "\n").indented(by: 2)
+    let methodBody = if isAsync {
+      DoubleAsyncInvocationBuilder.body(
+        invocation: invocationBody(parameters: parameters),
+        receiver: receiver,
+        stub: stub,
+        output: returnType?.trimmedDescription ?? "Swift.Void",
+        failure: isThrowing ? thrownType : nil
+      )
+    } else {
+      synchronizedBody(parameters: parameters)
+    }
     let signature = function.signature.generatedDescription
     let generics = function.genericParameterClause?.trimmedDescription ?? ""
     let constraints = function.genericWhereClause.map { " " + $0.trimmedDescription } ?? ""
     let attributes = function.attributes.isEmpty ? "" : function.attributes.trimmedDescription + "\n"
 
-    let requirement = """
+    return """
       \(attributes)\(access)\(modifier)func \(methodName)\(generics)\(signature)\(constraints) {
-      \(methodBody)
+      \(methodBody.indented(by: 2))
       }
       """
+  }
 
-    return requirement
+  private func synchronizedBody(parameters: [String]) -> String {
+    let body = invocationBody(parameters: parameters)
+    let effects = isThrowing ? " " + (throwsClause?.trimmedDescription ?? "throws") : ""
+    let output = returnType?.trimmedDescription ?? "Swift.Void"
+    let closureSignature = "()\(effects) -> \(output) in"
+    let call = "\(returnsValue ? "return " : "")\(isThrowing ? "try " : "")"
+    + "Mercury.previewableWithLock(\(receiver)._previewableLock) { \(closureSignature)"
+
+    return ([call] + body.map { "  " + $0 } + ["}"]).joined(separator: "\n")
   }
 }

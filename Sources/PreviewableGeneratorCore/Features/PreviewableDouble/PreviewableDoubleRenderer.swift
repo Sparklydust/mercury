@@ -193,10 +193,14 @@ private extension PreviewableDoubleRenderer {
           let name = pattern.identifier.text
           requirements.insert(name)
           stubs.insert(name + "Stub")
+          stubs.formUnion(asyncPropertyNames(in: binding, named: name))
         }
       } else if let function = requirement.function {
         let name = requirement.name
         requirements.insert(name)
+        if function.signature.effectSpecifiers?.asyncSpecifier != nil {
+          stubs.insert(requirement.stubName + "Spy")
+        }
         if let output = function.signature.returnClause?.type, !DefaultValueResolver.isVoid(output) {
           stubs.insert(requirement.stubName + "Stub")
         }
@@ -206,6 +210,16 @@ private extension PreviewableDoubleRenderer {
       }
     }
     return (requirements, stubs)
+  }
+
+  private static func asyncPropertyNames(in binding: PatternBindingSyntax, named name: String) -> Set<String> {
+    guard let getter = binding.accessorBlock?.asyncGetter else { return [] }
+    var names: Set<String> = [name + "Spy"]
+
+    if getter.effectSpecifiers?.throwsClause != nil {
+      names.formUnion([name + "ErrorStub", name + "ErrorsStub"])
+    }
+    return names
   }
 
   static func previewDeclaration(

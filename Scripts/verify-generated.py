@@ -377,6 +377,63 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     'static func make<Value: Sendable>(_ type: Value.Type) -> Value }',
     'ServiceDouble.withStaticStubs { ServiceDouble.makeStub.set(42, for: Int.self); '
     'let value: Int = ServiceDouble.make(Int.self); precondition(value == 42) }')
+  verify('async-spy-observation',
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { func load() async -> Int }',
+    '@MainActor func check() async { let double = ServiceDouble(); var observed: Int?; '
+    'double.loadSpy.observe { [weak double] in observed = double?.calledMethods.count }; '
+    '_ = await double.load(); precondition(observed == 1) }; await check()')
+  verify('async-spy-snapshot',
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { func load() async -> Int }',
+    'let double = ServiceDouble(); double.loadStub = 1; double.loadSpy.pause(); '
+    'let operation = Task { await double.load() }; defer { operation.cancel() }; '
+    'let call = try await double.loadSpy.waitForCall(); double.loadStub = 2; '
+    'call.resume(); let result = await operation.value; precondition(result == 1)')
+  verify('async-spy-typed-error',
+    'enum Failure: Error { case failed }\n'
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { func load() async throws(Failure) -> Int }',
+    'let double = ServiceDouble(); double.loadErrorStub = .failed; double.loadSpy.pause(); '
+    'let operation = Task { try await double.load() }; '
+    'let call = try await double.loadSpy.waitForCall(); operation.cancel(); call.resume(); '
+    'do { _ = try await operation.value; fatalError("expected failure") } catch Failure.failed {}')
+  for name in ['Result', 'Void', 'Error']:
+    verify('async-spy-generic-name-' + name,
+      '@PreviewableDouble protocol ServiceProtocol: Sendable { func make<' + name + ': Sendable>(_ type: ' + name + '.Type) async throws -> ' + name + ' }',
+      'let double = ServiceDouble(); double.makeStub.set(42, for: Int.self); '
+      'let value = try await double.make(Int.self); precondition(value == 42)')
+  verify('async-spy-parameter-shadowing',
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { func load(response: Int) async -> Int }',
+    'let double = ServiceDouble(); double.loadStub = 42; '
+    'let value = await double.load(response: 1); precondition(value == 42)')
+  verify('async-spy-static',
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { static func load() async -> Int }',
+    'let result = try await ServiceDouble.withStaticStubs { ServiceDouble.loadStub = 42; '
+    'ServiceDouble.loadSpy.pause(); let operation = Task { await ServiceDouble.load() }; '
+    'defer { operation.cancel() }; let call = try await ServiceDouble.loadSpy.waitForCall(); '
+    'call.resume(); return await operation.value }; precondition(result == 42)')
+  verify('async-getter-spy',
+    '@PreviewableDouble protocol ServiceProtocol: Sendable { var value: Int { get async throws } }',
+    'let double = ServiceDouble(); double.valueStub = 42; double.valueSpy.pause(); '
+    'let operation = Task { try await double.value }; defer { operation.cancel() }; '
+    'let call = try await double.valueSpy.waitForCall(); call.resume(); '
+    'let result = try await operation.value; precondition(result == 42)')
+  for first, second in [('get async', 'get'), ('get', 'get async throws'),
+      ('get async throws', 'get async'), ('get async throws(FirstFailure)', 'get async throws(SecondFailure)')]:
+    verify('async-getter-inheritance-' + first + '-' + second,
+      'enum FirstFailure: Error { case failed }\nenum SecondFailure: Error { case failed }\n'
+      'protocol First { var value: Int { ' + first + ' } }\n'
+      'protocol Second { var value: Int { ' + second + ' } }\n'
+      '@PreviewableDouble protocol ServiceProtocol: First, Second {}')
+  for actor in ['MainActor', 'Context']:
+    verify('async-getter-actor-' + actor,
+      '@globalActor actor Context { static let shared = Context() }\nfinal class Payload {}\n'
+      '@' + actor + ' @PreviewableDouble protocol ServiceProtocol { var value: Payload? { get async } }')
+  verify('async-spy-nonisolated-member',
+    '@MainActor @PreviewableDouble protocol ServiceProtocol { nonisolated func load() async -> Int }')
+  verify('async-spy-default-main-actor',
+    '@PreviewableDouble protocol ServiceProtocol { func load() async -> Int }',
+    flags=('-default-isolation', 'MainActor'))
+  verify('async-spy-release',
+    '@PreviewableDouble protocol ServiceProtocol { var value: Int { get async throws } }', release=True)
   verify('static-instance-same-name',
     '@PreviewableDouble protocol ServiceProtocol { static func load() -> Int; func load() -> Int }',
     'ServiceDouble.withStaticStubs { let double = ServiceDouble(); double.loadStub = 1; '

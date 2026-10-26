@@ -34,6 +34,8 @@ Mercury combines these roles in one generated type. You write the expectations; 
 
 SwiftUI examples require an Apple platform. See [validation scope](Documentation/Usage.md#validation-scope) for the platforms and workloads currently verified.
 
+Mercury also works in Vapor and other server-side Swift projects on Linux. Add the library and build plugin to the server target containing the annotated types; generated doubles and fakes are available in Debug builds, including tests.
+
 ## Installation
 
 ### Xcode
@@ -144,6 +146,33 @@ func title_profileIsRequested_callsServiceOnce() async throws {
 ```
 
 `passedParameters` records non-closure arguments. Use a fresh double for every test so responses and call history remain independent.
+
+### Tests: observe async work
+
+Each async method gets a spy, such as `loadProfileSpy`. Its observer runs after call recording and before the captured response or error is delivered. Use it to inspect intermediate state, including a consumer's loading flag.
+
+```swift
+@Test
+@MainActor
+func title_requestIsInProgress_serviceCallIsRecorded() async throws {
+  let serviceDouble = ProfileServiceDouble()
+  let sut = ProfileTitle(service: serviceDouble)
+  var observed: [String]?
+  serviceDouble.loadProfileSpy.observe { [weak serviceDouble] in
+    observed = serviceDouble?.calledMethods
+  }
+  let expected = ["loadProfile()"]
+
+  _ = try await sut.title()
+  let result = observed
+
+  #expect(result == expected)
+}
+```
+
+The observer inherits its creation context's actor. Capturing the value and asserting afterward also detects a missing invocation.
+
+For tests that need control over completion order, use `pause()`, `waitForCall()`, and the returned call's `resume()`. Async computed properties and subscript getters support the same controls. See [async observation and pauses](Documentation/Usage.md#async-observation-and-pauses) for examples, timeouts, and cancellation behavior.
 
 ### Previews: inject sample data
 

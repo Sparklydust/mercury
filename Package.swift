@@ -78,6 +78,7 @@ let package = Package(
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
         .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax")
       ],
+      swiftSettings: buildGeneratorFromSource ? [.define("MERCURY_BUILD_GENERATOR_FROM_SOURCE")] : [],
       plugins: ["PreviewableBuildToolPlugin"]
     )
   ] + (

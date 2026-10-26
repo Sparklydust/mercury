@@ -135,6 +135,72 @@ Release retains placeholder `fake()` factories and protocol-typed preview access
 
 The bundled generator and macro executables run on the build machine and are not embedded in the application.
 
+## Async observation and pauses
+
+Async methods, static async methods, async computed getters, and async subscript getters expose a `<member>Spy`. Overloads use the same allocated name as their stubs, such as `loadIdIntSpy`. Synchronous members retain their existing API.
+
+**Observe an intermediate value.** In a `@MainActor` test suite, keep the SUT and generated double in the fixture, as with other dependency doubles. Here, `sut.load()` sets `isLoading` while awaiting `serviceDouble.load()`.
+
+```swift
+@Test
+func load_requestIsInProgress_isLoadingIsTrue() async {
+  var observed: Bool?
+  serviceDouble.loadSpy.observe { [weak sut] in observed = sut?.isLoading }
+  let expected = true
+
+  await sut.load()
+  let result = observed
+
+  #expect(result == expected, "Loading must be visible while the dependency is executing.")
+}
+```
+
+Observation is nonthrowing and retains the closure's actor isolation. The optional capture starts as `nil`, so this assertion fails if the dependency is never called. Observers stay installed until replaced or removed with `observe(nil)`. Use weak captures when the observed object retains the double.
+
+**Pause only when completion timing matters.** The same fixture can hold a request open without sleeps or polling:
+
+```swift
+@Test
+func load_requestIsPaused_isLoadingIsTrue() async throws {
+  serviceDouble.loadSpy.pause()
+  let expected = true
+
+  let operation = Task { await sut.load() }
+  defer { operation.cancel() }
+  let call = try await serviceDouble.loadSpy.waitForCall()
+  let result = sut.isLoading
+  call.resume()
+  await operation.value
+
+  #expect(result == expected, "Loading must remain visible until the invocation is resumed.")
+}
+```
+
+Each invocation receives its own handle. Resume calls individually to test overlapping requests in a chosen order. `spy.resume()` releases all current pauses and stops pausing future calls. Repeated resume calls are harmless. `pause()` affects subsequent invocations.
+
+The response, persistent error, and selected queued error are resolved under the double's lock before observation. Later stub changes affect subsequent invocations; an already captured reference still refers to the same object. Observers and pauses run outside the lock. Queued errors retain priority over the persistent error stub.
+
+`waitForCall()` consumes the next unclaimed invocation in arrival order, even if it has already finished. Observation does not consume this queue. Waiting defaults to five seconds; pass `timeout:` to change it. Expiry throws `PreviewableAsyncSpyError.timedOut`; cancelling the waiting task throws `CancellationError`. An expired wait does not resume or cancel the invocation.
+
+Cancelling an invoking task releases its pause and then delivers its captured response or configured error. This preserves nonthrowing, typed-throwing, and `rethrows` contracts. Observer closures remain responsible for cooperating with cancellation if they perform their own asynchronous work.
+
+**Async computed properties** use the property name for configuration and observation:
+
+```swift
+@PreviewableDouble
+protocol ProfileStoreProtocol: Sendable {
+  var profile: Profile { get async throws }
+}
+
+let storeDouble = ProfileStoreDouble()
+storeDouble.profileStub = .fake(name: "Alex")
+let profile = try await storeDouble.profile
+```
+
+This getter also exposes `profileSpy`, `profileErrorStub`, and `profileErrorsStub`, and records reads as `profile.get`. Nonthrowing getters omit the error stubs. Swift's async properties are read-only computed getters; stored properties and setters cannot be declared async.
+
+Static spies belong to the existing `withStaticStubs` scope, alongside their responses and recordings. Inheriting child tasks share the scope; nested scopes remain independent. Generated spies are available with their doubles in Debug builds.
+
 ## Current limitations
 
 Unsupported construction produces a diagnostic on the annotated declaration.

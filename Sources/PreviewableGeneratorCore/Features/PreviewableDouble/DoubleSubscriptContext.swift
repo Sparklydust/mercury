@@ -78,7 +78,7 @@ struct DoubleSubscriptContext {
   ) throws -> [String] {
     let effects = function.signature.effectSpecifiers?.trimmedDescription ?? ""
     let getterEffects = effects.isEmpty ? "" : " " + effects
-    var result = ["get\(getterEffects) \(body(of: getter.requirement))"]
+    var result = ["get\(getterEffects) \(getter.body)"]
 
     if requirement.isSettable {
       result.append(try setter(resolver: &resolver))
@@ -110,7 +110,7 @@ struct DoubleSubscriptContext {
       stubName: requirement.stubName,
       recordingKey: key + ".set"
     )
-    return "set(\(assignedName)) \(body(of: setter.requirement))"
+    return "set(\(assignedName)) \(setter.body)"
   }
 
   func render(
@@ -137,8 +137,4 @@ struct DoubleSubscriptContext {
     )
   }
 
-  /// Extracts a rendered callable's body for use inside a subscript accessor.
-  private func body(of source: String) -> String {
-    Parser.parse(source: source).statements.first!.item.as(FunctionDeclSyntax.self)!.body!.trimmedDescription
-  }
 }
