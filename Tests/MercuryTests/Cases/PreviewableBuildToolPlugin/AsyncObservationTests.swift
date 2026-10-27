@@ -66,6 +66,18 @@ struct AsyncObservationTests {
   }
 
   @Test
+  func isolation_requestIsNotObserved_mainActorIsNotYielded() async {
+    var yielded = false
+    Task { yielded = true }
+    let expected = false
+
+    await sut.load()
+    let result = yielded
+
+    #expect(result == expected, "An unobserved request must not let other main-actor work run while it is in flight.")
+  }
+
+  @Test
   func getter_responseIsNotSendable_preservesActorLocalIdentity() async {
     let expected = Session()
     serviceDouble.payloadStub = expected

@@ -35,27 +35,30 @@ public final class PreviewableAsyncSpy: Sendable {
   }
 
   /// Consumes the next unclaimed invocation in arrival order, including calls that have already finished.
+  /// Runs in the caller's isolation and returns without suspending when an invocation is already available.
   /// - Parameter timeout: The maximum wait when no invocation is available; defaults to five seconds.
   /// - Throws: `PreviewableAsyncSpyError.timedOut` on expiry, or `CancellationError` if this wait is cancelled.
-  public func waitForCall(timeout: Duration = .seconds(5)) async throws -> PreviewableAsyncCall {
+  public nonisolated(nonsending) func waitForCall(timeout: Duration = .seconds(5)) async throws -> PreviewableAsyncCall {
     try Task.checkCancellation()
     guard let call = nextCall() else { return try await waitForFutureCall(timeout: timeout) }
     return call
   }
 
   /// Records entry and awaits observation and any configured pause before delivering the caller's snapshot.
+  /// Runs in the caller's isolation, so the call suspends only if its observer or a configured pause does.
   /// Cancellation releases the pause without replacing the method's declared response or error.
   @_spi(Generated)
-  public func recordCall() async {
+  public nonisolated(nonsending) func recordCall() async {
     let entry = state.withLock { state in
       let call = PreviewableAsyncCall(paused: state.paused)
-      state.activeCalls.append(call)
+      if state.paused { state.activeCalls.append(call) }
       let resolution = deliver(call, to: &state)
-      return (call: call, observer: state.observer, resolution: resolution)
+      return (call: call, paused: state.paused, observer: state.observer, resolution: resolution)
     }
     entry.resolution?.resume()
+    await entry.observer?()
+    guard entry.paused else { return }
     await withTaskCancellationHandler {
-      await entry.observer?()
       await entry.call.wait()
     } onCancel: {
       entry.call.resume()

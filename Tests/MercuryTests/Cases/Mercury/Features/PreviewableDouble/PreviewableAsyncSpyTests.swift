@@ -53,6 +53,33 @@ struct PreviewableAsyncSpyTests {
   }
 
   @Test
+  @MainActor
+  func isolation_callIsNeitherObservedNorPaused_callerActorIsNotYielded() async {
+    var yielded = false
+    Task { yielded = true }
+    let expected = false
+
+    await sut.recordCall()
+    let result = yielded
+
+    #expect(result == expected, "A call without observer or pause must not let other work run on the caller's actor.")
+  }
+
+  @Test
+  @MainActor
+  func isolation_observerRunsOnCallerActor_callerActorIsNotYielded() async {
+    var yielded = false
+    sut.observe { }
+    Task { yielded = true }
+    let expected = false
+
+    await sut.recordCall()
+    let result = yielded
+
+    #expect(result == expected, "An observer on the caller's actor must run without yielding that actor.")
+  }
+
+  @Test
   func pause_invocationArrives_callRemainsPaused() async throws {
     sut.pause()
     let expected = true
@@ -146,6 +173,21 @@ struct PreviewableAsyncSpyTests {
   }
 
   @Test
+  func cancellation_taskIsCancelledWhileObserving_releasesItsPause() async throws {
+    sut.pause()
+    sut.observe { withUnsafeCurrentTask { $0?.cancel() } }
+    let expected = false
+
+    let operation = Task { await sut.recordCall() }
+    defer { operation.cancel() }
+    let call = try await sut.waitForCall()
+    await operation.value
+    let result = call.isPaused
+
+    #expect(result == expected, "Cancellation during observation must release the pause once the observer returns.")
+  }
+
+  @Test
   func waiting_noCallArrives_throwsTimeout() async {
     let expected = PreviewableAsyncSpyError.timedOut
 
@@ -209,6 +251,20 @@ struct PreviewableAsyncSpyTests {
     let result = call.isPaused
 
     #expect(result == expected, "An available invocation must not race against a needless timeout task.")
+  }
+
+  @Test
+  @MainActor
+  func waiting_callHasFinished_callerActorIsNotYielded() async throws {
+    await sut.recordCall()
+    var yielded = false
+    Task { yielded = true }
+    let expected = false
+
+    _ = try await sut.waitForCall()
+    let result = yielded
+
+    #expect(result == expected, "Claiming a finished call must not let other work run on the caller's actor.")
   }
 
 
