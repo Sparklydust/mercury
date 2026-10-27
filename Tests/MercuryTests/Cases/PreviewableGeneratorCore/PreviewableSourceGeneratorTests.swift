@@ -179,12 +179,40 @@ struct PreviewableSourceGeneratorTests {
       "recursive default construction"
     ),
     (
-      "@PreviewableFake struct Model { let value: ExternalValue }",
-      "Model.value"
-    ),
-    (
       "@PreviewableFake struct Model<T> { let value: T }",
       "generic parameter 'T'"
+    ),
+    (
+      "@PreviewableDouble protocol ServiceProtocol { var kind: any ExternalKind { get } }",
+      "existential type 'ExternalKind'"
+    ),
+    (
+      "@PreviewableDouble protocol ServiceProtocol { var failure: any Error { get } }",
+      "existential type 'Swift.Error'"
+    ),
+    (
+      "@PreviewableDouble protocol ServiceProtocol { var failure: Error { get } }",
+      "existential type 'Swift.Error'"
+    ),
+    (
+      "@PreviewableFake struct Model { let payload: Codable }",
+      "existential type 'Swift.Codable'"
+    ),
+    (
+      "@PreviewableDouble protocol ServiceProtocol { var value: Any { get } }",
+      "existential type 'Any'"
+    ),
+    (
+      "@PreviewableDouble protocol ServiceProtocol { var owner: AnyObject { get } }",
+      "existential type 'Swift.AnyObject'"
+    ),
+    (
+      "@PreviewableDouble protocol ServiceProtocol { func stop() -> Never }",
+      "uninhabited type 'Never'"
+    ),
+    (
+      "struct Local { let value: Int }\n@PreviewableFake struct Model { let local: Local }",
+      "must be annotated with @PreviewableFake"
     ),
     (
       "@PreviewableFake private struct Model { let value: Int }",

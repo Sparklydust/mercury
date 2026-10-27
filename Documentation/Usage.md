@@ -105,7 +105,7 @@ let profile = Profile.fake()
 let namedProfile = Profile.fake(name: "Alex")
 ```
 
-Parameters have repeatable defaults and accept overrides. Defaults cover common scalar types, optionals, collections, simple enums, and annotated types. Computed properties and initialized constants are excluded. Override defaults when application validation requires specific values.
+Parameters have repeatable defaults and accept overrides. Defaults cover common scalar types, optionals, collections, simple enums, annotated types, and external types conforming to `PreviewableSynthesizable`. Computed properties and initialized constants are excluded. Override defaults when application validation requires specific values.
 
 Local nongeneric aliases use their underlying defaults, including closure storage and throwing construction.
 
@@ -122,6 +122,26 @@ extension ExternalToken {}
 ```
 
 Omit `throwing` for a nonthrowing initializer.
+
+### Defaults for external types
+
+Without an annotation, a type declared outside the module defaults to `Type.previewableDefault`. Supply it by conforming the type to `PreviewableSynthesizable` in the module that uses it:
+
+```swift
+extension CLAccuracyAuthorization: @retroactive PreviewableSynthesizable {
+  public static var previewableDefault: CLAccuracyAuthorization { .fullAccuracy }
+}
+```
+
+Mercury conforms `Bool`, `String`, `Character`, the integer and floating-point types, `CGFloat`, `Data`, `Date`, `UUID`, `URL`, and `Decimal`, so an alias another module declares for one of them, such as `CLLocationDistance`, needs nothing more. A generic type conforms conditionally on its arguments:
+
+```swift
+extension Box: @retroactive PreviewableSynthesizable where Element: PreviewableSynthesizable {
+  public static var previewableDefault: Box<Element> { Box(element: Element.previewableDefault) }
+}
+```
+
+A missing conformance is a compiler error in the generated source, not a trap at runtime. An extension annotated with `parameters:` keeps its `fake()` factory as the default, and optionals and collections keep `nil` and empty without a conformance. Existentials such as `any Error` or `Codable` cannot conform, and `Never` has no value, so the generator rejects both. Double stubs use the same defaults.
 
 ## Previews and Release builds
 

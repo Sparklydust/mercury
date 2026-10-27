@@ -545,7 +545,11 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
   assert 'ServiceDouble' not in symbols.stdout, 'Release executable contains a double implementation'
 
   domain = root / 'Domain.swift'
-  domain.write_text('public struct Token: Sendable { public let value: Int; public init(value: Int) throws { self.value = value } }')
+  domain.write_text(
+    'public struct Token: Sendable { public let value: Int; public init(value: Int) throws { self.value = value } }\n'
+    'public struct Kind: Sendable, Equatable { public let name: String; public init(name: String) { self.name = name } }\n'
+    'public struct Box<Element> { public let element: Element; public init(element: Element) { self.element = element } }\n'
+    'extension Box: Sendable where Element: Sendable {}')
   library = 'libDomain.dylib' if platform.system() == 'Darwin' else 'libDomain.so'
   require_success(run(compiler + ['-emit-module', '-emit-library', '-module-name', 'Domain',
     str(domain), '-o', str(root / library), '-emit-module-path', str(root / 'Domain.swiftmodule'),
@@ -556,3 +560,22 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
   verify('external-release-signature', external, release=True)
   verify('inherited-import', ['import struct Domain.Token\nprotocol Base { var token: Token? { get } }',
     '@PreviewableDouble protocol ServiceProtocol: Base {}'])
+  synthesizable = ('import Domain\n'
+    'extension Kind: @retroactive PreviewableSynthesizable {\n'
+    '  public static var previewableDefault: Kind { Kind(name: "synthesized") }\n}\n'
+    'extension Box: @retroactive PreviewableSynthesizable where Element: PreviewableSynthesizable {\n'
+    '  public static var previewableDefault: Box<Element> { Box(element: Element.previewableDefault) }\n}\n'
+    '@PreviewableFake struct Model { let kind: Kind; let box: Box<Int> }\n'
+    '@PreviewableDouble protocol ServiceProtocol { var kind: Kind { get }\nfunc load() -> Box<String> }')
+  verify('synthesizable-external-default', synthesizable,
+    'import Domain\n'
+    'let model = Model.fake()\n'
+    'precondition(model.kind == Kind(name: "synthesized"))\n'
+    'precondition(model.box.element == 0)\n'
+    'let double = ServiceDouble()\n'
+    'precondition(double.kind == Kind(name: "synthesized"))\n'
+    'precondition(double.load().element.isEmpty)\n'
+    'precondition(Model.fake(kind: Kind(name: "override")).kind == Kind(name: "override"))')
+  verify('synthesizable-release-signature', synthesizable, release=True)
+  verify('synthesizable-missing-conformance', 'import Domain\n@PreviewableFake struct Model { let kind: Kind }',
+    compile_error='previewableDefault')

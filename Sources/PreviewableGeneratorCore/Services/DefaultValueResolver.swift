@@ -16,6 +16,8 @@ struct DefaultValueResolver {
   let context: DefaultContext
   /// Generic parameter names of the enclosing declaration, which can never be defaulted.
   var genericParameters: Set<String> = []
+  /// Whether an uninspectable nominal type may defer its default to `PreviewableSynthesizable`.
+  var allowsConformanceFallback = true
   /// The property or method name included in resolution failures.
   var fieldName = "default"
   /// Whether resolution encountered an eager throwing factory since the caller last reset the flag.
@@ -42,7 +44,7 @@ struct DefaultValueResolver {
     case .arrayType: "[]"
     case .dictionaryType: "[:]"
     case .tupleType(let tuple): try tupleLiteral(for: tuple)
-    case .someOrAnyType(let existential): try defaultValue(for: existential.constraint)
+    case .someOrAnyType(let existential): try existentialDefault(for: existential)
     default: try nominalDefault(for: type, writtenType: writtenType)
     }
   }
@@ -88,6 +90,17 @@ private extension DefaultValueResolver {
     throw GenerationError.message(
       "cannot synthesise a default for '\(writtenType)' — no automatic default is available"
     )
+  }
+
+  /// Resolves an existential's constraint without deferring to `PreviewableSynthesizable`, which it cannot adopt.
+  /// - Parameter existential: The `any` or `some` type to default.
+  /// - Throws: `GenerationError` when the constraint has no supported default.
+  mutating func existentialDefault(for existential: SomeOrAnyTypeSyntax) throws -> String {
+    let previous = allowsConformanceFallback
+    allowsConformanceFallback = false
+    defer { allowsConformanceFallback = previous }
+
+    return try defaultValue(for: existential.constraint)
   }
 
   /// Extracts type arguments, returning an empty list when no generic clause is present.
@@ -149,6 +162,8 @@ private extension DefaultValueResolver {
   ///   - simpleName: The final component used for known types and generated double names.
   ///   - genericArguments: The written type arguments.
   /// - Throws: `GenerationError` when the nominal type cannot be constructed automatically.
+  ///   A type the module does not declare defers to `PreviewableSynthesizable`, unless it is a name that can
+  ///   never carry a conformance, which fails here rather than in the generated source.
   mutating func nominalDefault(
     named name: String,
     simpleName: String,
@@ -173,14 +188,20 @@ private extension DefaultValueResolver {
     if let known = try knownDefault(named: standardName, genericArguments: genericArguments) {
       return known
     }
-    guard genericArguments.isEmpty else {
+    guard standardName != "Never" else {
       throw GenerationError.message(
-        "cannot synthesise a default for generic type '\(name)' — no automatic default is available"
+        "cannot synthesise a default for '\(fieldName)' of uninhabited type 'Never' — no automatic default is available"
       )
     }
-    throw GenerationError.message(
-      "cannot synthesise a default for '\(fieldName)' of type '\(name)' — declare an explicit @PreviewableFake construction"
-    )
+    guard allowsConformanceFallback, !Self.existentialNames.contains(standardName) else {
+      throw GenerationError.message(
+        "cannot synthesise a default for '\(fieldName)' of existential type '\(name)' — no automatic default is available"
+      )
+    }
+    let arguments = genericArguments.map(\.trimmedDescription).joined(separator: ", ")
+
+    guard !arguments.isEmpty, !name.hasSuffix(">") else { return "\(name).previewableDefault" }
+    return "\(name)<\(arguments)>.previewableDefault"
   }
 
   /// Returns an expression for a supported built-in type, or `nil` when the name is unrecognized.
@@ -266,6 +287,17 @@ private extension DefaultValueResolver {
 
     return "try \(name).fake()"
   }
+
+  /// Standard names that can never carry a `PreviewableSynthesizable` conformance.
+  ///
+  /// `Any` and `AnyObject` are existentials with no witness table, and the standard protocols reach this resolver
+  /// whenever a requirement is written without `any`, which the Swift 5 language mode still accepts.
+  static let existentialNames: Set<String> = [
+    "Any", "AnyObject", "Error", "Sendable", "Hashable", "Equatable", "Comparable",
+    "Codable", "Encodable", "Decodable", "Identifiable", "RawRepresentable", "CaseIterable",
+    "Sequence", "Collection", "BidirectionalCollection", "RandomAccessCollection",
+    "MutableCollection", "RangeReplaceableCollection", "IteratorProtocol"
+  ]
 
   /// Type names supported by numeric default generation.
   static let numericTypes: Set<String> = [
