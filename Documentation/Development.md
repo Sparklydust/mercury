@@ -4,6 +4,8 @@ Run `swift test` locally. macOS CI also verifies bundled tools and generated con
 
 Commit `Package.resolved` and the bundled tools together when dependencies change. Environment examples may be committed; local environment files, build output, and Vapor's `db.sqlite` runtime files are ignored.
 
+Keep each extension in its own Swift file under the owning target's `Extensions` directory. Group files by extended type when that type has several extension files. Keep protocol declarations separate from their conformances.
+
 ### Async spy changes
 
 Keep the spy runtime tests under `Cases/Mercury/Features/PreviewableDouble` and generated consumer tests under `Cases/PreviewableBuildToolPlugin`. Cover actor isolation, typed errors, per-invocation snapshots, cancellation, and bounded waits. Coordinate tests through call handles rather than sleeps.
@@ -34,3 +36,11 @@ python3 Scripts/generator-artifact.py verify
 ```
 
 Verification checks source fingerprints, checksums, architectures, and signatures. CI rejects a stale bundle. For source development, run `MERCURY_BUILD_GENERATOR_FROM_SOURCE=1 swift test` before rebuilding the bundle.
+
+### Preparing a public release
+
+Review changes to the public macros, runtime types, and generated member names for source compatibility. Keep the README's versioned installation example, supported toolchains, and usage limitations consistent with the release.
+
+Verify the bundle, run `swift test` with the default bundled tools, and run `Scripts/verify-generated.py` against the package's Debug products. macOS CI must also pass Thread Sanitizer and Release compilation; Linux CI must pass tests, generated consumers, and Release compilation.
+
+Confirm that a separate Swift package can use the library and plugin in Debug and compile its production code in Release. The release tag must contain the reviewed source, matching bundled tools, and documentation. Publishing a tag or GitHub release is a separate action after these checks pass.

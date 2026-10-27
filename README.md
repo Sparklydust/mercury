@@ -28,7 +28,7 @@ Mercury combines these roles in one generated type. You write the expectations; 
 
 ## Requirements
 
-- Swift 6.4 or later.
+- Xcode 27 with Swift 6.4 or later on macOS, or a Swift 6.4 or later toolchain on Linux.
 - An Apple Silicon Mac, or Linux using source-built tools.
 - Apple deployment targets: iOS 27, macOS 27, tvOS 27, visionOS 27, and watchOS 27 or later.
 
@@ -47,12 +47,14 @@ Mercury also works in Vapor and other server-side Swift projects on Linux. Add t
 
 Apply the same setup to each target declaring annotations. If the types live in your app or feature target, tests import that target to use its generated types.
 
+A test target that imports `Mercury` directly also needs the Mercury library product. It needs the build plugin only when it declares its own annotated types.
+
 ### Swift Package Manager
 
-Add Mercury to the package dependencies. This example tracks `main`; use a published version tag when one is available.
+Add Mercury to the package dependencies with a version requirement:
 
 ```swift
-.package(url: "https://github.com/Sparklydust/mercury.git", branch: "main")
+.package(url: "https://github.com/Sparklydust/mercury.git", from: "1.0.0")
 ```
 
 Add the library and plugin to each target declaring annotations:
@@ -66,6 +68,8 @@ Add the library and plugin to each target declaring annotations:
 ```
 
 The plugin generates and compiles `Previewables.generated.swift`. You do not maintain that file.
+
+Build the target in Debug before running the examples below. A separate test target uses `@testable import YourFeature` for the internal types shown here, or a regular import for public types. Import `Mercury` when naming its runtime types and `Testing` when using `@Test` or `#expect`.
 
 ## One feature, three uses
 
@@ -109,10 +113,11 @@ Mercury generates `ProfileServiceDouble`, its `loadProfileStub` response, and `P
 
 ### Tests: control responses
 
-In your test target, import the module containing these types, then use Swift Testing:
+In your test target, replace `YourFeature` with the module containing these types:
 
 ```swift
 import Testing
+@testable import YourFeature
 
 @Test
 func title_profileLoads_returnsConfiguredName() async throws {
@@ -241,6 +246,8 @@ See the [usage reference](Documentation/Usage.md) for configuration examples, co
 ## Contributing
 
 Read the [development guide](Documentation/Development.md) for tests, CI checks, and bundled-tool updates. Keep changes focused, match the existing Swift style, and add behavior-focused tests when behavior changes.
+
+Mercury 1.x follows semantic versioning for its public macros, runtime APIs, and generated consumer APIs. Requirements and unsupported declarations are described in the [usage reference](Documentation/Usage.md). APIs imported through `@_spi(Generated)` support generated code and are outside that compatibility contract.
 
 ## License
 

@@ -1,5 +1,7 @@
 # Usage reference
 
+The examples assume the Mercury library and `PreviewableBuildToolPlugin` are attached to the target containing the annotated declarations. Generated doubles and working fake factories require a Debug build. Import `Mercury` in annotated files and `Testing` in test files using `@Test` or `#expect`. A separate test target needs `@testable import YourFeature` to access internal declarations, or a regular import for public declarations.
+
 ## Dependency doubles
 
 ```swift
@@ -21,7 +23,18 @@ let result = try await serviceDouble.name(for: 42)
 #expect(result == expected)
 ```
 
-Use `<property>Stub` and `<method>Stub` for responses, `<method>ErrorStub` for a persistent error, and `<method>ErrorsStub` for queued errors. `calledMethods` and `passedParameters` record invocations; closure arguments are excluded. Stub access and recording are synchronized. Use a fresh double per test.
+Use a fresh double per test. Stub access and invocation recording are synchronized. The generated configuration and recording APIs are:
+
+| API | Behavior |
+| --- | --- |
+| `<member>Stub` | Supplies the response. Configure responses with no automatic default before calling the member. |
+| `<member>ErrorStub` | Supplies a persistent error for a throwing member. Set it to `nil` to clear it. |
+| `<member>ErrorsStub` | Supplies queued errors, consumed in order before the persistent error. |
+| `calledMethods` | Records invocation keys in arrival order. Concurrent callers are ordered by scheduling. |
+| `passedParameters` | Groups recorded non-closure arguments by invocation key. |
+| `<member>Spy` | Observes or pauses an async method or getter before its captured response is delivered. |
+
+Synchronous property access forwards to the stub without recording a method call; assigning the property updates its stub. Async getters record `<property>.get`. Subscript reads and writes have separate recording keys. Configuring a stub is separate from invoking a recorded requirement.
 
 Doubles preserve the protocol's sendability, including inherited `Sendable` conformance. Legacy protocols need no additional conformance: their instance doubles accept non-Sendable arguments, responses, closures, and associated types. Sendable doubles require Sendable values outside actor isolation. Protocols and individual requirements retain their global-actor isolation.
 
@@ -105,7 +118,9 @@ let profile = Profile.fake()
 let namedProfile = Profile.fake(name: "Alex")
 ```
 
-Parameters have repeatable defaults and accept overrides. Defaults cover common scalar types, optionals, collections, simple enums, annotated types, and external types conforming to `PreviewableSynthesizable`. Computed properties and initialized constants are excluded. Override defaults when application validation requires specific values.
+Parameters have generated defaults and accept overrides. Defaults cover common scalar types, optionals, collections, simple enums, annotated types, and external types conforming to `PreviewableSynthesizable`. Computed properties and initialized constants are excluded. Override defaults when application validation requires specific values.
+
+Generated scalar sample values are repeatable for unchanged input declarations. External conformances control their own defaults; for example, `UUID.previewableDefault` creates a new identifier on each read.
 
 Local nongeneric aliases use their underlying defaults, including closure storage and throwing construction.
 
@@ -133,7 +148,11 @@ extension CLAccuracyAuthorization: @retroactive PreviewableSynthesizable {
 }
 ```
 
-Mercury conforms `Bool`, `String`, `Character`, the integer and floating-point types, `CGFloat`, `Data`, `Date`, `UUID`, `URL`, and `Decimal`, so an alias another module declares for one of them, such as `CLLocationDistance`, needs nothing more. A generic type conforms conditionally on its arguments:
+Mercury provides conformances for `Bool`, `String`, `Character`, `Int` and `UInt`, their 8-, 16-, 32-, and 64-bit variants, `Float`, `Double`, `Float16` where available, `CGFloat`, `Data`, `Date`, `UUID`, `URL`, and `Decimal`. An alias another module declares for one of these types, such as `CLLocationDistance`, uses the underlying conformance.
+
+Declare each external type's conformance once in the application. If several feature modules need it, place it in a shared module they import. `@retroactive` acknowledges that the type and protocol are owned outside your package; it does not allow separate conformances for the same type in different modules. Omit it when either declaration belongs to your own package, including another target in that package. Use fake arguments or stub overrides for scenario-specific values.
+
+A generic type imported from another package can conform conditionally on its arguments:
 
 ```swift
 extension Box: @retroactive PreviewableSynthesizable where Element: PreviewableSynthesizable {
@@ -145,7 +164,7 @@ A missing conformance is a compiler error in the generated source, not a trap at
 
 ## Previews and Release builds
 
-Use `ProfileServiceDouble.preview` for a shared preview instance. It retains state between accesses.
+For a nongeneric Sendable protocol, `ProfileServiceDouble.preview` is a shared preview instance. It retains state between accesses.
 
 Non-Sendable and generic doubles return a fresh instance from `.preview`. The global accessor also returns a fresh instance for non-Sendable doubles. These accessors are nonisolated and require no additional annotations. Keep the returned instance when configuring stubs before injection.
 
@@ -200,9 +219,11 @@ Each invocation receives its own handle. Resume calls individually to test overl
 
 The response, persistent error, and selected queued error are resolved under the double's lock before observation. Later stub changes affect subsequent invocations; an already captured reference still refers to the same object. Observers and pauses run outside the lock. Queued errors retain priority over the persistent error stub.
 
-The spy adds no suspension of its own: a call suspends only when its observer does or a pause holds it. No other work on the caller's actor runs during a call that is neither observed nor paused.
+The spy runs on the invoking member's isolation and adds no suspension when there is no observer or pause. When the caller and member stay on the same actor, an unobserved, unpaused invocation does not yield that actor. Calls to a member or observer on another actor can suspend while switching actors.
 
 `waitForCall()` consumes the next unclaimed invocation in arrival order, even if it has already finished. Observation does not consume this queue. Waiting defaults to five seconds; pass `timeout:` to change it. Expiry throws `PreviewableAsyncSpyError.timedOut`; cancelling the waiting task throws `CancellationError`. An expired wait does not resume or cancel the invocation.
+
+A call handle signals entry, not completion of its observer. `isPaused` reports whether that invocation still has an unreleased pause; `resume()` releases that pause without waiting for the observer to finish. Calls remain queued until claimed by `waitForCall()`, so use fresh doubles to bound call history in tests.
 
 Cancelling an invoking task releases its pause and then delivers its captured response or configured error. This preserves nonthrowing, typed-throwing, and `rethrows` contracts. Observer closures remain responsible for cooperating with cancellation if they perform their own asynchronous work.
 
@@ -225,7 +246,7 @@ Static spies belong to the existing `withStaticStubs` scope, alongside their res
 
 ## Current limitations
 
-Unsupported construction produces a diagnostic on the annotated declaration.
+The generator reports unsupported declarations at their annotations. Initializer contracts and external defaults it cannot inspect are checked when the generated source is compiled.
 
 - Structs need a usable memberwise or matching accessible initializer. Hidden fields need a matching initializer.
 - Classes need mutable fields and an accessible parameterless initializer; subclasses must declare it explicitly.
@@ -236,8 +257,18 @@ Unsupported construction produces a diagnostic on the annotated declaration.
 - Generated double types and global preview accessors must have unique file-scope names. Conditional file-scope declarations reserve their names across configurations.
 - A throwing fake cannot supply a nonthrowing double's stored default.
 
-### Validation scope
+## Public API compatibility
 
-- Performance has been measured in one iOS application with eight annotations. Scaling to larger targets and multiple modules remains unverified. A generation cache miss reparses all Swift sources in the target.
+The public contract includes `@PreviewableDouble`, both `@PreviewableFake` forms, `PreviewableSynthesizable`, generic response stores, async spies and call handles, and the generated APIs described above. Mercury 1.x preserves those APIs for declarations it already supports; new capabilities may add generated members.
+
+Generated names depend on the annotated declaration. Renaming a requirement, changing its signature, or adding overloads can change the corresponding stub and recording names. Treat changes to your annotated protocol as changes to its generated API too.
+
+Helpers imported through `@_spi(Generated)`, generator implementation types, and bundled executable details are implementation APIs. Use the public configuration and observation APIs instead of invoking those helpers directly.
+
+## Validation scope
+
+- macOS CI verifies bundled tools, generated consumers, tests with Thread Sanitizer, and Release compilation. Linux CI verifies source-built tools, tests, generated consumers, and Release compilation using the Swift 6.4 nightly image.
+- The README's test examples and public generated APIs were also checked in a separate consumer package in Debug and Release, including defaults for types from another package.
+- Performance has been measured in one iOS application with eight annotations. Larger targets and multiple modules have not been benchmarked. A generation cache miss reparses all Swift sources in the target.
 - Validation does not yet cover every declared platform at its minimum OS version.
 
