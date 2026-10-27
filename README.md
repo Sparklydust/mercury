@@ -234,7 +234,7 @@ On Apple Silicon Macs, Mercury uses bundled generator and macro executables to a
 
 ## More capabilities
 
-Mercury supports async and throwing methods, overloads, associated types, generic responses, property and subscript requirements, scoped static stubs, and actor isolation.
+Mercury supports async and throwing methods, overloads, associated types, generic responses, property and subscript requirements, scoped static stubs, actor isolation, and defaults for types declared in other modules.
 
 See the [usage reference](Documentation/Usage.md) for configuration examples, concurrency behavior, and current limitations. Unsupported declarations produce source diagnostics during generation.
 

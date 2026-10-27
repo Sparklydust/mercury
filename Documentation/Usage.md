@@ -200,6 +200,8 @@ Each invocation receives its own handle. Resume calls individually to test overl
 
 The response, persistent error, and selected queued error are resolved under the double's lock before observation. Later stub changes affect subsequent invocations; an already captured reference still refers to the same object. Observers and pauses run outside the lock. Queued errors retain priority over the persistent error stub.
 
+The spy adds no suspension of its own: a call suspends only when its observer does or a pause holds it. No other work on the caller's actor runs during a call that is neither observed nor paused.
+
 `waitForCall()` consumes the next unclaimed invocation in arrival order, even if it has already finished. Observation does not consume this queue. Waiting defaults to five seconds; pass `timeout:` to change it. Expiry throws `PreviewableAsyncSpyError.timedOut`; cancelling the waiting task throws `CancellationError`. An expired wait does not resume or cancel the invocation.
 
 Cancelling an invoking task releases its pause and then delivers its captured response or configured error. This preserves nonthrowing, typed-throwing, and `rethrows` contracts. Observer closures remain responsible for cooperating with cancellation if they perform their own asynchronous work.
