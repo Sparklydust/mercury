@@ -41,6 +41,8 @@ struct DoubleMethodContext {
     throwsClause?.type?.trimmedDescription ?? (genericNames.contains("Error") ? "any Swift.Error" : "any Error")
   }
 
+  /// Rejects requirement types that cannot be represented by the generated concrete double.
+  /// - Throws: `GenerationError` when a parameter or return type uses `Self`.
   func validateSignature() throws {
     let signatureTypes =
     function.signature.parameterClause.parameters.map(\.type)
@@ -52,6 +54,9 @@ struct DoubleMethodContext {
     }
   }
 
+  /// Returns recordable argument names in declaration order, excluding function-typed arguments.
+  /// - Parameter resolver: The resolver used to inspect aliased parameter types.
+  /// - Throws: `GenerationError` for variadic or unnamed parameters, or cyclic type aliases.
   func recordedParameters(resolver: inout DefaultValueResolver) throws -> [String] {
     var parameters: [String] = []
 
@@ -71,6 +76,9 @@ struct DoubleMethodContext {
     return parameters
   }
 
+  /// Renders response storage, error queues, and an async spy when the signature requires them.
+  /// - Parameter resolver: The resolver whose state allocates response defaults.
+  /// - Throws: `GenerationError` for unsupported error types, response constraints, or defaults.
   func stubDeclarations(
     resolver: inout DefaultValueResolver
   ) throws -> [String] {
@@ -191,6 +199,8 @@ struct DoubleMethodContext {
     return body
   }
 
+  /// Renders the original signature with synchronized recording and response delivery.
+  /// - Parameter parameters: Non-closure argument names included in invocation recordings.
   func requirement(parameters: [String]) -> String {
     let methodBody = if isAsync {
       DoubleAsyncInvocationBuilder.body(

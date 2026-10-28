@@ -1,5 +1,5 @@
 {
-  "sourceSHA256": "283f7cd0a3f3420707dbaafb2619a704623312c142f11ff9107244e8b7a73e95",
+  "sourceSHA256": "4bd8934a6a4e5ca8b4c54cf77e81e55a44b807ae564dd9c2cea667bc47c83974",
   "swiftVersion": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.2.0",
   "files": {
     "bin/PreviewableGenerator": "24221bb58a8d6edc0658c1a7bb6137e5f2580bcb8a81c9de89dde1557a4d7093",

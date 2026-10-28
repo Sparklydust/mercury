@@ -22,6 +22,8 @@ struct DoubleRequirementSyntax {
         ?? variable?.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text ?? "init"
   }
 
+  /// Classifies a requirement, modeling a subscript getter as a method for canonical identity generation.
+  /// - Parameter member: The requirement declaration to inspect.
   init(_ member: MemberBlockItemSyntax) {
     self.member = member
     subscriptDeclaration = member.decl.as(SubscriptDeclSyntax.self)

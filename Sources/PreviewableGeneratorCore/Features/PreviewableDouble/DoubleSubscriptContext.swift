@@ -40,6 +40,9 @@ struct DoubleSubscriptContext {
     }
   }
 
+  /// Renders the getter with complete typed indices and a distinct read-recording key.
+  /// - Parameter resolver: The resolver whose state allocates getter defaults.
+  /// - Throws: `GenerationError` for unsupported getter requirements or unavailable defaults.
   func getter(resolver: inout DefaultValueResolver) throws -> GeneratedMethod {
     try PreviewableDoubleMemberBuilder.methodDeclaration(
       from: function,
@@ -72,6 +75,11 @@ struct DoubleSubscriptContext {
       """
   }
 
+  /// Renders the getter and any setter; writes record arguments without replacing the getter response.
+  /// - Parameters:
+  ///   - getter: The getter implementation with its captured response and recording.
+  ///   - resolver: The resolver used to validate setter argument types.
+  /// - Throws: `GenerationError` for unsupported setter requirements.
   func accessors(
     getter: GeneratedMethod,
     resolver: inout DefaultValueResolver
@@ -113,6 +121,10 @@ struct DoubleSubscriptContext {
     return "set(\(assignedName)) \(setter.body)"
   }
 
+  /// Renders the subscript witness and its typed response-resolution helper.
+  /// - Parameters:
+  ///   - stubs: Response, error, and observation storage for the subscript.
+  ///   - accessors: The rendered getter and optional setter implementations.
   func render(
     stubs: [String],
     accessors: [String]

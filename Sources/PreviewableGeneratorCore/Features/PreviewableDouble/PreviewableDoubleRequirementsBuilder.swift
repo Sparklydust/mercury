@@ -15,6 +15,15 @@ struct PreviewableDoubleRequirementsBuilder {
   private var propertyNames: Set<String> = []
   private var staticPropertyNames: Set<String> = []
 
+  /// Renders validated requirements while keeping instance and scoped static storage separate.
+  /// - Parameters:
+  ///   - requirements: Canonical requirements in emission order.
+  ///   - access: The generated double's effective access prefix.
+  ///   - isolated: Whether the protocol is globally actor-isolated.
+  ///   - sendable: Whether instances must support transfer between isolation domains.
+  ///   - index: Module declarations used for requirement validation.
+  ///   - resolver: The resolver whose state allocates distinct response defaults.
+  /// - Throws: `GenerationError` for unsupported requirements or unavailable defaults.
   static func generate(
     requirements: [DoubleRequirement],
     access: String,

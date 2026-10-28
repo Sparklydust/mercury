@@ -143,7 +143,11 @@ Omit `throwing` for a nonthrowing initializer.
 Without an annotation, a type declared outside the module defaults to `Type.previewableDefault`. Supply it by conforming the type to `PreviewableSynthesizable` in the module that uses it:
 
 ```swift
+import CoreLocation
+import Mercury
+
 extension CLAccuracyAuthorization: @retroactive PreviewableSynthesizable {
+
   public static var previewableDefault: CLAccuracyAuthorization { .fullAccuracy }
 }
 ```
@@ -156,6 +160,7 @@ A generic type imported from another package can conform conditionally on its ar
 
 ```swift
 extension Box: @retroactive PreviewableSynthesizable where Element: PreviewableSynthesizable {
+
   public static var previewableDefault: Box<Element> { Box(element: Element.previewableDefault) }
 }
 ```

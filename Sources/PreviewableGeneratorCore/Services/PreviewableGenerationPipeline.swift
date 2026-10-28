@@ -17,6 +17,9 @@ enum PreviewableGenerationPipeline {
     PreviewableFakeGenerator.self
   ]
 
+  /// Generates a deterministic source file after indexing and validating the complete input module.
+  /// - Parameter files: Source files, sorted by path before collection and default allocation.
+  /// - Throws: Source-located diagnostics for unsupported declarations or invalid defaults.
   static func generate(from files: [PreviewableSourceFile]) throws -> String {
     let files = files.sorted { $0.path < $1.path }
     let trees = files.map { Parser.parse(source: $0.text) }

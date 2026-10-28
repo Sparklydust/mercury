@@ -5,5 +5,7 @@
 import Foundation
 
 extension Data: PreviewableSynthesizable {
+
+  /// Empty binary data.
   public static var previewableDefault: Data { .init() }
 }

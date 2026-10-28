@@ -20,6 +20,12 @@ struct DoubleDefinition {
   var sharedPreview: Bool { sendable && associated.parameters.isEmpty }
   var isolation: String { Self.protocolIsolation(declaration, index: index) }
 
+  /// Validates a protocol and resolves its isolation, sendability, and associated types.
+  /// - Parameters:
+  ///   - declaration: The annotated protocol.
+  ///   - qualifiedName: Its name including enclosing declaration names.
+  ///   - index: Module declarations used to resolve access, inheritance, and aliases.
+  /// - Throws: `GenerationError` for inaccessible declarations, name conflicts, or unsupported requirements.
   static func resolve(
     from declaration: ProtocolDeclSyntax,
     qualifiedName: String,
@@ -51,6 +57,8 @@ struct DoubleDefinition {
     )
   }
 
+  /// Collects canonical requirements after associated-type substitution.
+  /// - Throws: `GenerationError` for unsupported or conflicting requirements.
   func requirements() throws -> [DoubleRequirement] {
     try DoubleRequirement.collect(
       members,

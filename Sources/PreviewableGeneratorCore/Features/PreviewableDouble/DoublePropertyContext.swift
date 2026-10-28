@@ -22,6 +22,13 @@ struct DoublePropertyContext {
     declaration.attributes.isEmpty ? "" : declaration.attributes.trimmedDescription + "\n"
   }
 
+  /// Renders response storage and a property witness, retaining async getter effects.
+  /// - Parameters:
+  ///   - binding: The named, explicitly typed property requirement.
+  ///   - seen: Names already emitted in this instance or static dispatch scope.
+  ///   - resolver: The resolver whose state allocates property defaults.
+  /// - Returns: The generated property, or `nil` if its name was already emitted.
+  /// - Throws: `GenerationError` for unsupported declarations, types, or defaults.
   func property(
     from binding: PatternBindingSyntax,
     seen: inout Set<String>,

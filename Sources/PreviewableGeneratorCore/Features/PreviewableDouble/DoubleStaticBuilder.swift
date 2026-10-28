@@ -2,6 +2,7 @@
 // Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
+import Foundation
 import SwiftParser
 import SwiftSyntax
 

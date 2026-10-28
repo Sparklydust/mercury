@@ -26,6 +26,7 @@ final class TypeNameResolver: SyntaxRewriter {
     self.genericParameters = genericParameters
   }
 
+  /// Qualifies local references without rewriting generic parameter names.
   override func visit(_ node: IdentifierTypeSyntax) -> TypeSyntax {
     let rewritten = super.visit(node)
     let name = node.name.text
@@ -39,6 +40,7 @@ final class TypeNameResolver: SyntaxRewriter {
     return result.with(\.leadingTrivia, node.leadingTrivia).with(\.trailingTrivia, node.trailingTrivia)
   }
 
+  /// Qualifies a method's types while preserving its declaration-local generic names.
   override func visit(_ node: FunctionDeclSyntax) -> DeclSyntax {
     let local = TypeNameResolver(
       index: index,

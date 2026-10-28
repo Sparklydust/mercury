@@ -7,6 +7,13 @@ import Foundation
 /// Captures responses and errors synchronously before awaiting user observation or a call pause.
 enum DoubleAsyncInvocationBuilder {
 
+  /// Renders a locked response snapshot followed by observation and any per-call pause.
+  /// - Parameters:
+  ///   - invocation: Recording and response-selection statements run under the double's lock.
+  ///   - receiver: The instance or scoped static state that owns the lock.
+  ///   - stub: The base name of this member's response and spy storage.
+  ///   - output: The declared return type, including `Void` for valueless calls.
+  ///   - failure: The declared error type, or `nil` for a nonthrowing response.
   static func body(
     invocation: [String],
     receiver: String,

@@ -2,6 +2,7 @@
 // Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
+import Foundation
 import SwiftSyntax
 
 /// Resolves protocol associated types into explicit generic parameters and concrete aliases.

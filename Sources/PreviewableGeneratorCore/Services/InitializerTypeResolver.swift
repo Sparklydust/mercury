@@ -2,6 +2,7 @@
 // Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
+import Foundation
 import SwiftSyntax
 
 /// Normalizes type spellings for initializer matching without changing emitted declarations.
@@ -41,6 +42,7 @@ final class InitializerTypeResolver: SyntaxRewriter {
       .replacingOccurrences(of: "@escaping", with: "")
   }
 
+  /// Expands local aliases and qualifies recognized nominal type names.
   override func visit(_ node: IdentifierTypeSyntax) -> TypeSyntax {
     let rewritten = super.visit(node)
     let name = node.name.text
@@ -65,6 +67,7 @@ final class InitializerTypeResolver: SyntaxRewriter {
     return TypeSyntax.parsed(from: module + "." + rewritten.trimmedDescription) ?? rewritten
   }
 
+  /// Expands known qualified aliases while preserving other member type syntax.
   override func visit(_ node: MemberTypeSyntax) -> TypeSyntax {
     guard node.genericArgumentClause == nil,
           let qualified = index.resolve(node.trimmedDescription, scope: scope),

@@ -7,6 +7,10 @@ import SwiftSyntax
 /// Retains a writable witness or the getter effects that satisfy every equivalent inherited property.
 enum DoublePropertyRequirementMerger {
 
+  /// Chooses a writable witness or getter effects that satisfy both equivalent property requirements.
+  /// - Parameters:
+  ///   - existing: The previously collected requirement.
+  ///   - incoming: An equivalent inherited requirement to merge.
   static func merge(_ existing: DoubleRequirement, _ incoming: DoubleRequirement) -> DoubleRequirement {
     guard !incoming.isSettable else { return incoming }
     guard !existing.isSettable,

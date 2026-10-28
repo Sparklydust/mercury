@@ -8,7 +8,10 @@ import Foundation
 @_spi(Generated)
 public enum PreviewableValue<Value> {
 
+  /// No response has been configured for this stub.
   case unconfigured
+
+  /// A configured response, including an explicit optional `nil`.
   case configured(Value)
 
   /// Returns the configured response or identifies the stub that needs configuration.

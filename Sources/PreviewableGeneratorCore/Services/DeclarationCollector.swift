@@ -2,6 +2,7 @@
 // Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
+import Foundation
 import SwiftSyntax
 
 /// Collects every declaration the generator needs, at any nesting depth.
@@ -20,6 +21,7 @@ final class DeclarationCollector: SyntaxVisitor {
     super.init(viewMode: .sourceAccurate)
   }
 
+  /// Records protocol inheritance and annotations before collecting its nested declarations.
   override func visit(_ node: ProtocolDeclSyntax) -> SyntaxVisitorContinueKind {
     let position = Self.lexicalPosition(of: node)
     let name = node.name.text
@@ -32,6 +34,7 @@ final class DeclarationCollector: SyntaxVisitor {
     return .visitChildren
   }
 
+  /// Records alias access and nongeneric definitions in their lexical scope.
   override func visit(_ node: TypeAliasDeclSyntax) -> SyntaxVisitorContinueKind {
     recordGlobalName(node.name.text, at: node)
     let name = Self.qualifiedName(for: node.name.text, at: Self.lexicalPosition(of: node))
@@ -43,6 +46,7 @@ final class DeclarationCollector: SyntaxVisitor {
     return .visitChildren
   }
 
+  /// Reserves binding names that could collide with generated file-scope declarations.
   override func visit(_ node: VariableDeclSyntax) -> SyntaxVisitorContinueKind {
     for binding in node.bindings {
       for token in binding.pattern.tokens(viewMode: .sourceAccurate) {
@@ -54,6 +58,7 @@ final class DeclarationCollector: SyntaxVisitor {
     return .visitChildren
   }
 
+  /// Reserves parameterless function names that could collide with generated preview accessors.
   override func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {
     if node.signature.parameterClause.parameters.isEmpty {
       recordGlobalName(node.name.text, at: node)
@@ -61,6 +66,7 @@ final class DeclarationCollector: SyntaxVisitor {
     return .visitChildren
   }
 
+  /// Records extension annotations using the extended type's written identity.
   override func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
     guard let annotated = Self.annotation(in: node.attributes) else { return .visitChildren }
     // The generator never sees the extended type, so its spelling in the extension is the only name there is.

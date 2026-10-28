@@ -13,6 +13,8 @@ public final class PreviewableAsyncCall: Sendable {
   /// Whether this invocation has an unreleased pause, including while its observer executes.
   public var isPaused: Bool { state.withLock { !$0.resumed } }
 
+  /// Creates a handle whose pause can be released before or after continuation registration.
+  /// - Parameter paused: Whether the invoking task must wait for a release.
   init(paused: Bool) {
     state = Mutex(PreviewableAsyncCallState(resumed: !paused))
   }
@@ -28,6 +30,7 @@ public final class PreviewableAsyncCall: Sendable {
     continuation?.resume()
   }
 
+  /// Suspends until the pause is released, returning immediately if it was already released.
   func wait() async {
     await withCheckedContinuation { suspend($0) }
   }

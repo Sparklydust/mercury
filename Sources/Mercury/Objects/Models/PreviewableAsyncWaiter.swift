@@ -9,6 +9,9 @@ final class PreviewableAsyncWaiter: Sendable {
 
   private let state = Mutex(PreviewableAsyncWaiterState())
 
+  /// Delivers an outcome if cancellation, timeout, or call arrival has not already claimed this waiter.
+  /// - Parameter result: The call or error offered to the waiting task.
+  /// - Returns: Whether this outcome won the race to resolve the waiter.
   @discardableResult
   func resolve(_ result: Result<PreviewableAsyncCall, any Error>) -> Bool {
     guard let resolution = claim(result) else { return false }
@@ -27,6 +30,8 @@ final class PreviewableAsyncWaiter: Sendable {
     }
   }
 
+  /// Returns the claimed call, suspending only while no outcome has arrived.
+  /// - Throws: The cancellation or timeout error that resolved the waiter.
   func wait() async throws -> PreviewableAsyncCall {
     try await withCheckedThrowingContinuation { continuation in
       let result: Result<PreviewableAsyncCall, any Error>? = state.withLock { state in

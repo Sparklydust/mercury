@@ -2,6 +2,7 @@
 // Copyright © 2026 Mercury contributors. MIT licensed.
 //
 
+import Foundation
 import SwiftSyntax
 
 /// Validates the constraints required by generic response storage.

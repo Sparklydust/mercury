@@ -7,6 +7,15 @@ import SwiftSyntax
 /// Gives async getters the same response snapshots, error stubs, and spies as async methods.
 enum DoubleAsyncPropertyBuilder {
 
+  /// Renders an async getter using the method generator's snapshot, recording, and spy behavior.
+  /// - Parameters:
+  ///   - context: The property's access, sendability, and isolation settings.
+  ///   - getter: The validated async getter and its throwing effects.
+  ///   - name: The property's name, also used as its stub base name.
+  ///   - type: The getter's return type.
+  ///   - signature: The property declaration without its accessor block.
+  ///   - resolver: The resolver whose state allocates response defaults.
+  /// - Throws: `GenerationError` for unsupported requirements or unavailable defaults.
   static func generate(
     context: DoublePropertyContext,
     getter: AccessorDeclSyntax,
