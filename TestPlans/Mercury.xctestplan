@@ -1,0 +1,30 @@
+{
+  "configurations" : [
+    {
+      "id" : "F987CF1A-9322-4BBC-8D43-AD8F07061A3E",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : true,
+    "defaultTestExecutionTimeAllowance" : 60,
+    "language" : "en",
+    "maximumTestExecutionTimeAllowance" : 120,
+    "region" : "CH",
+    "testExecutionOrdering" : "random",
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "MercuryTests",
+        "name" : "MercuryTests"
+      }
+    }
+  ],
+  "version" : 1
+}

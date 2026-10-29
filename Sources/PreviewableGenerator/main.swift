@@ -1,24 +1,18 @@
+//
+// Copyright © 2026 Mercury contributors. MIT licensed.
+//
+
 import Foundation
 import PreviewableGeneratorCore
 
-/// The command-line entry point that writes generated Previewable source for a build target.
-@main
-enum PreviewableGenerator {
-
-  /// Reads the requested Swift sources and writes their generated Previewable declarations.
-  /// - Throws: When the output path is missing, a source cannot be read, generation fails, or output cannot be written.
-  static func main() throws {
-    let arguments = Array(CommandLine.arguments.dropFirst())
-    guard let outputPath = arguments.first else { throw GeneratorCommandError.missingOutputPath }
-
-    let sources = try arguments.dropFirst().map {
-      try String(contentsOfFile: $0, encoding: .utf8)
-    }
-    let generated = try PreviewableSourceGenerator.generate(from: sources)
-    try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
-  }
-}
-
-private enum GeneratorCommandError: Error {
-  case missingOutputPath
+// Source diagnostics retain their file location; invocation and I/O failures use an unallocated error message.
+// - Info: holding an executable target's top-level code, carrying its invocation and nothing else.
+do {
+  try PreviewableGenerator.run()
+} catch let diagnostic as PreviewableDiagnostic {
+  FileHandle.standardError.write(Data("\(diagnostic)\n".utf8))
+  exit(1)
+} catch {
+  FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+  exit(1)
 }
