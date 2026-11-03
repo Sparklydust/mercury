@@ -20,7 +20,7 @@ Initial public release.
 
 - Swift 6.4 or later; Xcode 27 or later on macOS.
 - An Apple Silicon Mac, or Linux with source-built tools.
-- Apple deployment targets of iOS 27, macOS 27, tvOS 27, visionOS 27, and watchOS 27 or later.
+- Apple deployment targets of iOS 18, macOS 15, tvOS 18, visionOS 2, and watchOS 11 or later.
 
 ### Build behavior
 

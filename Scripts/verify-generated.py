@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
   # Match Package.swift rather than swiftc's deployment target for the build host.
   compiler = [args.swiftc, '-swift-version', '6']
   if platform.system() == 'Darwin':
-    compiler += ['-target', f'{platform.machine()}-apple-macosx27.0']
+    compiler += ['-target', f'{platform.machine()}-apple-macosx15.0']
   base = compiler + ['-I', str(modules),
     '-module-cache-path', str(root / 'cache'),
     '-load-plugin-executable', f'{plugin}#PreviewableMacrosPlugin']

@@ -43,4 +43,6 @@ Review changes to the public macros, runtime types, and generated member names f
 
 Verify the bundle, run `swift test` with the default bundled tools, and run `Scripts/verify-generated.py` against the package's Debug products. macOS CI must also pass Thread Sanitizer and Release compilation; Linux CI must pass tests, generated consumers, and Release compilation.
 
+The consumer verification script compiles for macOS 15, matching the package's minimum deployment target. Keep this target aligned with `Package.swift` when changing platform support. Building still requires Xcode 27 / Swift 6.4.
+
 Confirm that a separate Swift package can use the library and plugin in Debug and compile its production code in Release. The release tag must contain the reviewed source, matching bundled tools, and documentation. Publishing a tag or GitHub release is a separate action after these checks pass.

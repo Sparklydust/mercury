@@ -30,7 +30,9 @@ Mercury combines these roles in one generated type. You write the expectations; 
 
 - Xcode 27 with Swift 6.4 or later on macOS, or a Swift 6.4 or later toolchain on Linux.
 - An Apple Silicon Mac, or Linux using source-built tools.
-- Apple deployment targets: iOS 27, macOS 27, tvOS 27, visionOS 27, and watchOS 27 or later.
+- Apple deployment targets: iOS 18, macOS 15, tvOS 18, visionOS 2, and watchOS 11 or later.
+
+The build toolchain requirement is separate from these minimum deployment targets.
 
 SwiftUI examples require an Apple platform. See [validation scope](Documentation/Usage.md#validation-scope) for the platforms and workloads currently verified.
 

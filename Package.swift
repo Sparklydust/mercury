@@ -20,11 +20,11 @@ let macroSourceDependencies: [Target.Dependency] = [
 let package = Package(
   name: "mercury",
   platforms: [
-    .iOS(.v27),
-    .macOS(.v27),
-    .tvOS(.v27),
-    .visionOS(.v27),
-    .watchOS(.v27)
+    .iOS(.v18),
+    .macOS(.v15),
+    .tvOS(.v18),
+    .visionOS(.v2),
+    .watchOS(.v11)
   ],
   products: [
     .library(name: "Mercury", targets: ["Mercury"]),

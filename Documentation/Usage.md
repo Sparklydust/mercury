@@ -274,6 +274,7 @@ Helpers imported through `@_spi(Generated)`, generator implementation types, and
 
 - macOS CI verifies bundled tools, generated consumers, tests with Thread Sanitizer, and Release compilation. Linux CI verifies source-built tools, tests, generated consumers, and Release compilation using the Swift 6.4 nightly image.
 - The README's test examples and public generated APIs were also checked in a separate consumer package in Debug and Release, including defaults for types from another package.
+- The runtime and generated fixture declarations compile in Debug and Release for iOS 18, macOS 15, tvOS 18, watchOS 11, and visionOS 2.
 - Performance has been measured in one iOS application with eight annotations. Larger targets and multiple modules have not been benchmarked. A generation cache miss reparses all Swift sources in the target.
-- Validation does not yet cover every declared platform at its minimum OS version.
+- Execution on devices or simulators at every minimum OS version remains unverified.
 
