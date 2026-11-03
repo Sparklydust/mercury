@@ -12,7 +12,7 @@ enum PreviewableRequirementFlattener {
   ///   - declaration: The protocol whose requirements are collected.
   ///   - index: The module declarations used for inheritance and type qualification.
   ///   - visited: Qualified protocol names already traversed; updated to prevent duplicate traversal.
-  /// - Throws: `GenerationError` for conditional requirements or an inherited protocol absent from the module.
+  /// - Throws: `GenerationError` for conditional declarations or requirements, or an unreadable inherited protocol.
   static func requirements(
     of declaration: ProtocolDeclSyntax,
     index: ModuleIndex,
@@ -21,6 +21,7 @@ enum PreviewableRequirementFlattener {
     let qualified = index.protocols.first { $0.value.id == declaration.id }?.key ?? declaration.name.text
 
     guard visited.insert(qualified).inserted else { return [] }
+    try validateDeclarationScope(declaration, qualifiedName: qualified)
     guard !declaration.memberBlock.members.contains(where: { $0.decl.is(IfConfigDeclSyntax.self) }) else {
       throw GenerationError.message(
         "@PreviewableDouble does not support conditional requirements in '\(qualified)' — declare requirements without #if"
@@ -54,6 +55,23 @@ enum PreviewableRequirementFlattener {
     }
 
     return members
+  }
+
+  /// Rejects conditional base declarations because indexing cannot select the consumer's active branch.
+  private static func validateDeclarationScope(
+    _ declaration: ProtocolDeclSyntax,
+    qualifiedName: String
+  ) throws {
+    var ancestor = declaration.parent
+
+    while let parent = ancestor {
+      if parent.is(IfConfigDeclSyntax.self) {
+        throw GenerationError.message(
+          "@PreviewableDouble does not support conditional declaration of '\(qualifiedName)' — declare it without #if"
+        )
+      }
+      ancestor = parent.parent
+    }
   }
 
   /// Collects only associated names visible through this protocol's local inheritance graph.

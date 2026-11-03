@@ -59,17 +59,25 @@ extension DefaultDependencyValidator {
     return edges
   }
 
+  /// Returns defaults initialized with an instance; static defaults belong to a separate scoped state.
   private static func requirementTypes(
     in member: MemberBlockItemSyntax
   ) -> [TypeSyntax] {
     if let variable = member.decl.as(VariableDeclSyntax.self) {
-      return variable.bindings.compactMap { $0.typeAnnotation?.type }
+      return variable.modifiers.isStatic ? [] : variable.bindings.compactMap { $0.typeAnnotation?.type }
     }
 
     if let function = member.decl.as(FunctionDeclSyntax.self),
+       !function.modifiers.isStatic,
        function.genericParameterClause == nil,
        let type = function.signature.returnClause?.type {
       return [type]
+    }
+
+    if let subscriptDeclaration = member.decl.as(SubscriptDeclSyntax.self),
+       !subscriptDeclaration.modifiers.isStatic,
+       subscriptDeclaration.genericParameterClause == nil {
+      return [subscriptDeclaration.returnClause.type]
     }
     return []
   }

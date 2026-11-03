@@ -258,7 +258,7 @@ The generator reports unsupported declarations at their annotations. Initializer
 - Generic fields need constructible defaults; a bare `Value` has none. Required nested defaults cannot form a cycle.
 - Nested types need accessible ancestors. Put actor isolation on the type, not its initializer.
 - Inherited protocols must be readable in the same target. Bare `Self` value types, variadic parameters, and generic thrown errors remain unsupported. Subscripts do not yet support responses keyed by arguments.
-- Annotations inside conditional blocks, function bodies, or extensions with nested declarations are unsupported. Protocol requirements inside `#if` blocks are also rejected, including inherited requirements.
+- Annotations inside conditional blocks, function bodies, or extensions with nested declarations are unsupported. Inherited protocols and protocol requirements declared inside `#if` blocks are also rejected.
 - Generated double types and global preview accessors must have unique file-scope names. Conditional file-scope declarations reserve their names across configurations.
 - A throwing fake cannot supply a nonthrowing double's stored default.
 

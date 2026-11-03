@@ -110,6 +110,27 @@ struct PreviewableSourceGeneratorTests {
     )
   }
 
+  @Test(arguments: ["os(Linux)", "os(macOS)", "DEBUG"])
+  func generator_inheritedProtocolIsConditional_diagnosticIsEmitted(_ condition: String) {
+    let sources = [
+      PreviewableSourceFile(path: "Parent.swift", text: """
+        #if \(condition)
+        protocol Parent { func first() }
+        #else
+        protocol Parent { func second() }
+        #endif
+        """),
+      PreviewableSourceFile(path: "Child.swift", text: """
+        @PreviewableDouble
+        protocol Child: Parent {}
+        """)
+    ]
+
+    let result = generatorDiagnostic(for: sources)?.message
+
+    #expect(result?.contains("conditional declaration of 'Parent'") == true)
+  }
+
   @Test
   func generator_declarationIsGenerated_diagnosticsAreRemappedOntoTheAnnotation() throws {
     let sources = [
