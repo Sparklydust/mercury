@@ -2,7 +2,8 @@
 
 ## 1.0.0
 
-Initial public release.
+- [#3](https://github.com/Sparklydust/mercury/issues/3) Initial public release.
+- [#1](https://github.com/Sparklydust/mercury/issues/1) Implement the Mercury Previewable macro package
 
 ### Added
 
