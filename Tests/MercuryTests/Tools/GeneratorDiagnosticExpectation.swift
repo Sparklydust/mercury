@@ -7,8 +7,14 @@ import PreviewableGeneratorCore
 /// Returns a source diagnostic, or `nil` when generation succeeds or throws another error type.
 /// - Parameter file: The source file to generate in isolation.
 func generatorDiagnostic(for file: PreviewableSourceFile) -> PreviewableDiagnostic? {
+  generatorDiagnostic(for: [file])
+}
+
+/// Returns the source diagnostic from generating a module, or `nil` when no source diagnostic is thrown.
+/// - Parameter files: The source files collected into one module.
+func generatorDiagnostic(for files: [PreviewableSourceFile]) -> PreviewableDiagnostic? {
   do {
-    _ = try PreviewableSourceGenerator.generate(from: [file])
+    _ = try PreviewableSourceGenerator.generate(from: files)
     return nil
   } catch let diagnostic as PreviewableDiagnostic {
     return diagnostic

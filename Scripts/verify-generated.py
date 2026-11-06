@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
   # Match Package.swift rather than swiftc's deployment target for the build host.
   compiler = [args.swiftc, '-swift-version', '6']
   if platform.system() == 'Darwin':
-    compiler += ['-target', f'{platform.machine()}-apple-macosx27.0']
+    compiler += ['-target', f'{platform.machine()}-apple-macosx15.0']
   base = compiler + ['-I', str(modules),
     '-module-cache-path', str(root / 'cache'),
     '-load-plugin-executable', f'{plugin}#PreviewableMacrosPlugin']
@@ -208,6 +208,24 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
   verify('inherited-conditional-requirement',
     'protocol Base {\n#if os(macOS)\nfunc refresh()\n#endif\n}\n'
     '@PreviewableDouble protocol Service: Base {}', generation_error="conditional requirements in 'Base'")
+  verify('inherited-conditional-declaration', [
+    '#if os(Linux)\nprotocol Parent { func linux() }\n#else\nprotocol Parent { func mac() }\n#endif',
+    '@PreviewableDouble protocol Child: Parent {}'
+  ], generation_error="conditional declaration of 'Parent'")
+  verify('recursive-subscript-default',
+    '@PreviewableDouble protocol NodeProtocol { subscript(index: Int) -> any NodeProtocol { get } }',
+    generation_error='recursive default construction')
+  verify('indirect-recursive-subscript-default',
+    'typealias Child = any ChildProtocol\n'
+    '@PreviewableDouble protocol NodeProtocol { subscript(index: Int) -> Child { get } }\n'
+    '@PreviewableDouble protocol ChildProtocol { var parent: any NodeProtocol { get } }',
+    generation_error='recursive default construction')
+  verify('optional-recursive-subscript-default',
+    '@PreviewableDouble protocol NodeProtocol { subscript(index: Int) -> (any NodeProtocol)? { get } }',
+    'precondition(NodeDouble()[0] == nil)')
+  verify('deferred-recursive-subscript-default',
+    '@PreviewableDouble protocol NodeProtocol { subscript(index: Int) -> () -> any NodeProtocol { get } }',
+    'let double = NodeDouble(); precondition(double[0]() is NodeDouble)')
   for number, declaration in enumerate([
     'let serviceDouble = 42', 'let (serviceDouble, other) = (1, 2)', 'private let `serviceDouble` = 42',
     'func serviceDouble() -> Int { 1 }', 'struct serviceDouble {}', '@PreviewableDouble protocol service {}',
@@ -347,6 +365,19 @@ with tempfile.TemporaryDirectory(prefix='mercury-consumers-') as directory:
     'let double = ServiceDouble<String>(); double.loadStub = "ready"; '
     'let service: any ServiceProtocol<String> = double; precondition(service.load() == "ready")')
   static = '@PreviewableDouble protocol ServiceProtocol: Sendable { static func load() -> Int }'
+  for name, requirement, invocation in [
+    ('method', 'static func make() -> any FactoryProtocol', 'FactoryDouble.make()'),
+    ('property', 'static var shared: any FactoryProtocol { get }', 'FactoryDouble.shared'),
+    ('subscript', 'static subscript(index: Int) -> any FactoryProtocol { get }', 'FactoryDouble[0]')
+  ]:
+    verify('static-self-default-' + name,
+      '@PreviewableDouble protocol FactoryProtocol: Sendable { ' + requirement + ' }',
+      'FactoryDouble.withStaticStubs { precondition(' + invocation + ' is FactoryDouble) }')
+  verify('static-inherited-default-with-instance-back-reference',
+    'protocol FactoryBase: Sendable { static func make() -> any NodeProtocol }\n'
+    '@PreviewableDouble protocol FactoryProtocol: FactoryBase {}\n'
+    '@PreviewableDouble protocol NodeProtocol: Sendable { var factory: any FactoryProtocol { get } }',
+    'FactoryDouble.withStaticStubs { precondition(FactoryDouble.make().factory is FactoryDouble) }')
   verify('static-missing-scope', static, 'let _ = ServiceDouble.load()', crashes='Missing Previewable static scope')
   verify('static-scope-ends', static,
     'ServiceDouble.withStaticStubs { ServiceDouble.loadStub = 42 }; let _ = ServiceDouble.load()',
